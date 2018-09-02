@@ -50,6 +50,7 @@ start(_Type, Args) ->
     case bondy_sup:start_link() of
         {ok, Pid} ->
             ok = setup_env(Args),
+            ok = bondy_config:init(),
             ok = bondy_router_worker:start_pool(),
             ok = bondy_stats:init(),
             ok = bondy_cli:register(),

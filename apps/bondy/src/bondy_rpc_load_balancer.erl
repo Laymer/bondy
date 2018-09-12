@@ -219,8 +219,8 @@ get_round_robin(undefined, [H|T]) ->
     %% We never invoked this procedure before or we reordered the round
     case bondy_peer_service:mynode() =:= bondy_registry_entry:node(H) of
         true ->
-            Pid = bondy_session:pid(bondy_registry_entry:session_id(H)),
-            case erlang:is_process_alive(Pid) of
+            Peer = bondy_session:peer(bondy_registry_entry:session_id(H)),
+            case bondy_wamp_peer:is_local_connection_alive(Peer) of
                 true ->
                     %% We update the invocation state
                     ok = set_last_invocation(

@@ -150,9 +150,9 @@ add_local_subscription(RealmUri, Uri, Opts, Pid) ->
 
     case ets:match_object(Tab, Pattern) of
         [] ->
-            PeerId = {RealmUri, Node, undefined, Pid},
+            Peer = bondy_wamp_peer:new(RealmUri, Node, Pid),
             RegId = bondy_utils:get_id(global),
-            Entry = bondy_registry_entry:new(Type, RegId, PeerId, Uri, Opts),
+            Entry = bondy_registry_entry:new(Type, RegId, Peer, Uri, Opts),
             %% We do not add to DB since that will broadcast the subscription
             %% to other nodes
             add_to_tuplespace(Entry);
@@ -202,8 +202,8 @@ add_local_subscription(RealmUri, Uri, Opts, Pid) ->
 
 add(Type, Uri, Options, Ctxt) ->
     RealmUri = bondy_context:realm_uri(Ctxt),
-    PeerId = bondy_context:peer_id(Ctxt),
-    %% Pattern = bondy_registry_entry:new(Type, PeerId, Uri, Options),
+    Peer = bondy_context:peer(Ctxt),
+    %% Pattern = bondy_registry_entry:new(Type, Peer, Uri, Options),
     Pattern = case Type of
         registration ->
             %% A session can register a procedure multiple times if
@@ -211,7 +211,9 @@ add(Type, Uri, Options, Ctxt) ->
             %% So we do not match SessionId
             bondy_registry_entry:pattern(Type, RealmUri, '_', '_', Uri, '_');
         subscription ->
-            {RealmUri, Node, SessionId, _} = PeerId,
+            RealmUri = bondy_wamp_peer:realm_uri(Peer),
+            Node = bondy_wamp_peer:node(Peer),
+            SessionId = bondy_wamp_peer:session_id(Peer),
             bondy_registry_entry:pattern(
                 Type, RealmUri, Node, SessionId, Uri, '_')
     end,
@@ -221,7 +223,7 @@ add(Type, Uri, Options, Ctxt) ->
         [] ->
             %% No matching registrations at all exists or
             %% No matching subscriptions for this SessionId exists
-            Entry = bondy_registry_entry:new(Type, PeerId, Uri, Options),
+            Entry = bondy_registry_entry:new(Type, Peer, Uri, Options),
             do_add(Entry);
 
         [Entry] when Type == subscription ->
@@ -255,7 +257,7 @@ add(Type, Uri, Options, Ctxt) ->
             case Flag of
                 true ->
                     NewEntry = bondy_registry_entry:new(
-                        Type, PeerId, Uri, Options),
+                        Type, Peer, Uri, Options),
                     do_add(NewEntry);
                 false ->
                     Map = bondy_registry_entry:to_details_map(Entry),

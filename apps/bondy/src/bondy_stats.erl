@@ -170,7 +170,7 @@ update(Event) ->
 %% -----------------------------------------------------------------------------
 -spec update(wamp_message:message(), bondy_context:t()) -> ok.
 
-update(M, #{peer := {_IP, _}} = Ctxt) ->
+update(M, Ctxt) ->
     %% Type = element(1, M),
     %% Size = erts_debug:flat_size(M) * 8,
     %% case Ctxt of

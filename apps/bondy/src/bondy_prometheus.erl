@@ -278,7 +278,7 @@ get_labels_values(Ctxt) ->
     {T, FT, E} = bondy_context:subprotocol(Ctxt),
     [
         get_realm(Ctxt),
-        node_name(),
+        bondy_context:node(Ctxt),
         wamp,
         T,
         FT,

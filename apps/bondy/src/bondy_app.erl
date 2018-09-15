@@ -52,7 +52,6 @@ start(_Type, Args) ->
             ok = setup_env(Args),
             ok = bondy_config:init(),
             ok = bondy_router_worker:start_pool(),
-            ok = bondy_stats:init(),
             ok = bondy_cli:register(),
             ok = setup_partisan(),
             ok = maybe_init_bondy_realm(),

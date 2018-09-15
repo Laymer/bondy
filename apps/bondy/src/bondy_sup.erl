@@ -40,6 +40,7 @@ start_link() ->
 
 init([]) ->
     Children = [
+        ?CHILD(bondy_stats, worker, [], permanent, 5000),
         ?CHILD(bondy_registry, worker, [], permanent, 5000),
         ?CHILD(bondy_broker_events, worker, [], permanent, 5000),
         ?CHILD(bondy_peer_wamp_forwarder, worker, [], permanent, 5000),

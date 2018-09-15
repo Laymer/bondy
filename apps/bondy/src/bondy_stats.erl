@@ -17,33 +17,39 @@
 %% =============================================================================
 
 -module(bondy_stats).
+-behaviour(gen_server).
 
--export([init/0]).
+-record(state, {}).
+
+
 -export([otp_release/0]).
 -export([sys_driver_version/0]).
 -export([sys_monitor_count/0]).
 -export([system_architecture/0]).
 -export([system_version/0]).
 -export([update/1]).
+-export([start_link/0]).
+
+%% GEN_SERVER CALLBACKS
+-export([init/1]).
+-export([handle_info/2]).
+-export([terminate/2]).
+-export([code_change/3]).
+-export([handle_call/3]).
+-export([handle_cast/2]).
 
 
 %% =============================================================================
 %% API
 %% =============================================================================
 
-
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec init() -> ok.
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-init() ->
-    % create_metrics(system_specs()),
-    %% create_metrics(bc_specs()),
-    %% create_metrics(static_specs()).
-    bondy_cowboy_prometheus:setup(),
-    bondy_prometheus:init().
 
 
 %% -----------------------------------------------------------------------------
@@ -109,8 +115,50 @@ sys_monitor_count() ->
 %% -----------------------------------------------------------------------------
 -spec update(tuple()) -> ok.
 
-update(Event) ->
-    bondy_prometheus:update(Event).
+update(Event) when is_tuple(Event) ->
+    gen_server:cast(?MODULE, {event, Event}).
 
 
 
+
+
+%% =============================================================================
+%% GEN_SERVER CALLBACKS
+%% =============================================================================
+
+
+
+init([]) ->
+    bondy_cowboy_prometheus:setup(),
+    bondy_prometheus:init(),
+    {ok, #state{}}.
+
+
+handle_call(Event, From, State) ->
+    _ = lager:error(
+        "Error handling call, reason=unsupported_event, event=~p, from=~p", [Event, From]),
+    {noreply, State}.
+
+
+handle_cast({event, Event}, State) ->
+    ok = bondy_prometheus:update(Event),
+    {noreply, State};
+
+handle_cast(Event, State) ->
+    _ = lager:error(
+        "Error handling call, reason=unsupported_event, event=~p", [Event]),
+    {noreply, State}.
+
+
+handle_info(Info, State) ->
+    _ = lager:error("Unexpected message, message=~p", [Info]),
+    {noreply, State}.
+
+
+
+terminate(_Reason, _State) ->
+    ok.
+
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.

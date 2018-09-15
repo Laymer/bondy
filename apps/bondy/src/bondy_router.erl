@@ -105,6 +105,7 @@
 %% API
 -export([close_context/1]).
 -export([forward/2]).
+-export([async_forward/2]).
 -export([handle_peer_message/1]).
 -export([roles/0]).
 -export([agent/0]).
@@ -190,7 +191,7 @@ agent() ->
 forward(M, #{session := _} = Ctxt) ->
     %% Client has a session so this should be either a message
     %% for broker or dealer roles
-    ok = bondy_stats:update(M, Ctxt),
+    ok = bondy_stats:update({wamp_message, M, Ctxt}),
     do_forward(M, Ctxt).
 
 
@@ -331,6 +332,11 @@ do_forward(M, Ctxt) ->
 
 
 %% @private
+async_forward(Data, Ctxt0) when is_binary(Data) ->
+    Subproto = bondy_context:subprotocol(Ctxt0),
+    {[M], <<>>} = wamp_encoding:decode(Subproto, Data),
+    async_forward(M, Ctxt0);
+
 async_forward(M, Ctxt0) ->
     %% Client already has a session.
     %% RFC: By default, publications are unacknowledged, and the _Broker_ will
@@ -368,7 +374,7 @@ async_forward(M, Ctxt0) ->
                 [maps:get(<<"message">>, ErrorMap)],
                 #{error => ErrorMap}
             ),
-            ok = bondy_stats:update(Reply, Ctxt0),
+            ok = bondy_stats:update({wamp_message, Reply, Ctxt0}),
             {reply, Reply, Ctxt0};
         Class:Reason ->
             Ctxt = bondy_context:realm_uri(Ctxt0),

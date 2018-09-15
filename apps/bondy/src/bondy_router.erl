@@ -187,10 +187,7 @@ agent() ->
     | {reply, Reply :: wamp_message(), bondy_context:t()}
     | {stop, Reply :: wamp_message(), bondy_context:t()}.
 
-
-forward(M, #{session := _} = Ctxt) ->
-    %% Client has a session so this should be either a message
-    %% for broker or dealer roles
+forward(M, Ctxt) ->
     ok = bondy_stats:update({wamp_message, M, Ctxt}),
     do_forward(M, Ctxt).
 

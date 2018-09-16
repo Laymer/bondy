@@ -52,6 +52,7 @@
 -export([dequeue_invocation/2]).
 -export([dequeue_invocation/3]).
 -export([enqueue/3]).
+-export([enqueue/4]).
 -export([flush/1]).
 -export([invocation_id/1]).
 -export([new/3]).
@@ -160,7 +161,15 @@ procedure_uri(#bondy_rpc_promise{procedure_uri = Val}) -> Val.
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
-enqueue(RealmUri, #bondy_rpc_promise{} = P, Timeout) ->
+enqueue(RealmUri, P, Timeout) ->
+    enqueue(RealmUri, P, Timeout, undefined).
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+enqueue(RealmUri, #bondy_rpc_promise{} = P, Timeout, Fun)
+ when is_function(Fun, 1) orelse Fun == undefined ->
     %% We validate the realm
     RealmUri == realm_uri(P) orelse error(badarg),
 
@@ -169,13 +178,15 @@ enqueue(RealmUri, #bondy_rpc_promise{} = P, Timeout) ->
     CallId = P#bondy_rpc_promise.call_id,
     CallerSessionId = bondy_wamp_peer:session_id(P#bondy_rpc_promise.caller),
 
-    OnEvict = fun(_) ->
+    OnEvict = fun(Val) ->
         _ = lager:debug(
             "RPC Promise evicted from queue;"
             " realm_uri=~p, caller_session_id=~p, invocation_id=~p, call_id=~p"
             " timeout=~p",
             [RealmUri, CallerSessionId, InvocationId, CallId, Timeout]
-        )
+        ),
+        Fun == undefined orelse Fun(Val),
+        ok
     end,
     Secs = erlang:round(Timeout / 1000),
     Opts = #{key => Key, ttl => Secs, on_evict => OnEvict},

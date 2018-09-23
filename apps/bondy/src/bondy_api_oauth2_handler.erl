@@ -310,10 +310,10 @@ accept(Req0, St) ->
                 revoke_token_flow(Data, Req1, St)
         end
     catch
-        error:Reason ->
+        ?EXCEPTION(error, Reason, Stacktrace) ->
             _ = lager:error(
                 "type=error, reason=~p, stacktrace:~p",
-                [Reason, erlang:get_stacktrace()]),
+                [Reason, ?STACKTRACE(Stacktrace)]),
             Req2 = reply(Reason, Req0),
             {false, Req2, St}
     end.

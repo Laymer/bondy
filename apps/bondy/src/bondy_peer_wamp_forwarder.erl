@@ -318,11 +318,11 @@ handle_cast({'receive', Mssg, BinPid}, State) ->
         throw:badarg ->
             ok = cast_message(peer_error(badarg, Mssg), BinPid),
             {noreply, State};
-        Error:Reason ->
+        ?EXCEPTION(Class, Reason, Stacktrace) ->
             %% TODO publish metaevent
             _ = lager:error(
                 "Error handling cast, error=~p, reason=~p, stacktrace=~p",
-                [Error, Reason, erlang:get_stacktrace()]),
+                [Class, Reason, ?STACKTRACE(Stacktrace)]),
             ok = cast_message(peer_error(Reason, Mssg), BinPid),
             {noreply, State}
     end.

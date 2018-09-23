@@ -99,10 +99,10 @@ close_context(Ctxt) ->
         ok = unsubscribe_all(Ctxt),
         Ctxt
     catch
-    Class:Reason ->
+        ?EXCEPTION(Class, Reason, Stacktrace) ->
         _ = lager:debug(
             "Error while closing context; class=~p, reason=~p, trace=~p",
-            [Class, Reason, erlang:get_stacktrace()]
+            [Class, Reason, ?STACKTRACE(Stacktrace)]
         ),
         Ctxt
     end.
@@ -278,8 +278,8 @@ when is_map(Ctxt) ->
     try
         do_publish(ReqId, Opts, TopicUri, Args, ArgsKw, Ctxt)
     catch
-        _:Reason ->
-            _ = lager:error("Error while publishing; reason=~p, stacktrace=~p", [Reason, erlang:get_stacktrace()]),
+        ?EXCEPTION(_, Reason, Stacktrace) ->
+            _ = lager:error("Error while publishing; reason=~p, stacktrace=~p", [Reason, ?STACKTRACE(Stacktrace)]),
             {error, Reason}
     end.
 

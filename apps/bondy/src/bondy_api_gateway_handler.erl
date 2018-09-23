@@ -140,11 +140,11 @@ is_authorized(Req0, St) ->
             try
                 do_is_authorised(Req0, St)
             catch
-                Class:Reason ->
+                ?EXCEPTION(Class, Reason, Stacktrace) ->
                     _ = log(
                         error,
                         "type=~p, reason=~p, stacktrace=~p",
-                        [Class, Reason, erlang:get_stacktrace()],
+                        [Class, Reason, ?STACKTRACE(Stacktrace)],
                         St
                     ),
                     {StatusCode, Body} = take_status_code(
@@ -328,11 +328,11 @@ provide(Req0, #{api_spec := Spec} = St0)  ->
             Response = #{<<"body">> => Body, <<"headers">> => #{}},
             Req1 = reply(StatusCode, error_encoding(Enc), Response, Req0),
             {stop, Req1, St0};
-        Class:Reason ->
+        ?EXCEPTION(Class, Reason, Stacktrace) ->
             _ = log(
                 error,
                 "type=~p, reason=~p, stacktrace=~p",
-                [Class, Reason, erlang:get_stacktrace()],
+                [Class, Reason, ?STACKTRACE(Stacktrace)],
                 St0
             ),
             {StatusCode, Body} = take_status_code(bondy_error:map(Reason), 500),
@@ -381,11 +381,11 @@ do_accept(Req0, #{api_spec := Spec} = St0) ->
             ErrResp = #{ <<"body">> => Body, <<"headers">> => #{}},
             Req = reply(StatusCode1, error_encoding(Enc), ErrResp, Req0),
             {stop, Req, St0};
-        Class:Reason ->
+        ?EXCEPTION(Class, Reason, Stacktrace) ->
             _ = log(
                 error,
                 "type=~p, reason=~p, stacktrace=~p",
-                [Class, Reason, erlang:get_stacktrace()],
+                [Class, Reason, ?STACKTRACE(Stacktrace)],
                 St0
             ),
             {StatusCode1, Body} = take_status_code(
@@ -577,12 +577,12 @@ orelse Method =:= <<"put">> ->
         Body = bondy_utils:decode(Enc, Bin),
         maps:update(api_context, maps_utils:put_path(Path, Body, Ctxt), St)
     catch
-        Class:Error ->
+        ?EXCEPTION(Class, Reason, Stacktrace) ->
             _ = log(
                 error,
                 "Error while decoding HTTP body, "
                 "type=~p, reason=~p, stacktrace=~p",
-                [Class, Error, erlang:get_stacktrace()],
+                [Class, Reason, ?STACKTRACE(Stacktrace)],
                 St
             ),
             throw({badarg, {decoding, Enc}})

@@ -45,6 +45,15 @@
 
 
 %% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+{mapping, "broker_bridge.kafka.enabled", "bondy_broker_bridge.bridges.bondy_kafka_bridge.enabled", [
+  {datatype, flag},
+  {default, off}
+]}.
+
+%% -----------------------------------------------------------------------------
 %% @doc A mapping of names to kafka topics. This mapping is used by the JSON
 %% broker_bridge.config_file which defines the subscribers for each bridge.
 %%
@@ -75,6 +84,7 @@ fun(Conf0) ->
         Conf
     )
 end}.
+
 
 
 %% -----------------------------------------------------------------------------
@@ -184,6 +194,7 @@ end}.
   {datatype, bytesize},
   {include_default, "default"}
 ]}.
+
 
 
 {translation,

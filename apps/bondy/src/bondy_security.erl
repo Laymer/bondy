@@ -1291,7 +1291,7 @@ print_sources(RealmUri) ->
 %% @private
 do_print_sources(Sources) ->
     GS = group_sources(Sources),
-    bondy_console_table:print([{users, 20}, {cidr, 10}, {source, 10}, {options, 10}],
+    bondy_cli_console_table:print([{users, 20}, {cidr, 10}, {source, 10}, {options, 10}],
                 [[prettyprint_users(Users, 20), prettyprint_cidr(CIDR),
                   atom_to_list(Source), io_lib:format("~p", [Options])] ||
             {Users, CIDR, Source, Options} <- GS]).
@@ -1328,7 +1328,7 @@ print_users(RealmUri) ->
 
 %% @private
 do_print_users(RealmUri, Users) ->
-    bondy_console_table:print([{username, 10}, {'member of', 15}, {password, 40}, {options, 30}],
+    bondy_cli_console_table:print([{username, 10}, {'member of', 15}, {password, 40}, {options, 30}],
                 [begin
                      Groups = case proplists:get_value(?GROUPS, Options) of
                                  undefined ->
@@ -1386,7 +1386,7 @@ print_groups(RealmUri) ->
 
 %% @private
 do_print_groups(RealmUri, Groups) ->
-    bondy_console_table:print([{group, 10}, {'member of', 15}, {options, 30}],
+    bondy_cli_console_table:print([{group, 10}, {'member of', 15}, {options, 30}],
                 [begin
                      GroupOptions = case proplists:get_value(?GROUPS, Options) of
                                  undefined ->
@@ -1432,7 +1432,7 @@ print_grants(RealmUri, User, user) ->
         _U ->
             Grants = accumulate_grants(RealmUri, User, user),
 
-            bondy_console_table:print(
+            bondy_cli_console_table:print(
               io_lib:format("Inherited permissions (user/~ts)", [User]),
               [{group, 20}, {type, 10}, {bucket, 10}, {grants, 40}],
                         [begin
@@ -1450,7 +1450,7 @@ print_grants(RealmUri, User, user) ->
                          end ||
                          {{Username, Bucket}, Permissions} <- Grants, Username /= <<"user/", User/binary>>]),
 
-            bondy_console_table:print(
+            bondy_cli_console_table:print(
               io_lib:format("Dedicated permissions (user/~ts)", [User]),
               [{type, 10}, {bucket, 10}, {grants, 40}],
                         [begin
@@ -1469,7 +1469,7 @@ print_grants(RealmUri, User, user) ->
                          {{Username, Bucket}, Permissions} <- Grants, Username == <<"user/", User/binary>>]),
             GroupedGrants = group_grants(Grants),
 
-            bondy_console_table:print(
+            bondy_cli_console_table:print(
               io_lib:format("Cumulative permissions (user/~ts)", [User]),
               [{type, 10}, {bucket, 10}, {grants, 40}],
                         [begin
@@ -1495,7 +1495,7 @@ print_grants(RealmUri, Group, group) ->
         _U ->
             Grants = accumulate_grants(RealmUri, Group, group),
 
-            bondy_console_table:print(
+            bondy_cli_console_table:print(
               io_lib:format("Inherited permissions (group/~ts)", [Group]),
               [{group, 20}, {type, 10}, {bucket, 10}, {grants, 40}],
                         [begin
@@ -1513,7 +1513,7 @@ print_grants(RealmUri, Group, group) ->
                          end ||
                          {{Groupname, Bucket}, Permissions} <- Grants, chop_name(Groupname) /= Group]),
 
-            bondy_console_table:print(
+            bondy_cli_console_table:print(
               io_lib:format("Dedicated permissions (group/~ts)", [Group]),
               [{type, 10}, {bucket, 10}, {grants, 40}],
                         [begin
@@ -1532,7 +1532,7 @@ print_grants(RealmUri, Group, group) ->
                          {{Groupname, Bucket}, Permissions} <- Grants, chop_name(Groupname) == Group]),
             GroupedGrants = group_grants(Grants),
 
-            bondy_console_table:print(
+            bondy_cli_console_table:print(
               io_lib:format("Cumulative permissions (group/~ts)", [Group]),
               [{type, 10}, {bucket, 10}, {grants, 40}],
                         [begin

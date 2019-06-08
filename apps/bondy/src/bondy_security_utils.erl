@@ -48,7 +48,7 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -spec authenticate(
-    auth_scheme(), auth_scheme_val(), uri(), bondy_session:peer()) ->
+    auth_scheme(), auth_scheme_val(), uri(), inet:peername()) ->
     {ok, bondy_security:context() | map()} | {error, auth_error_reason()}.
 
 authenticate(?TICKET_AUTH, {?TICKET_AUTH, AuthId, Signature}, Realm, Peer) ->

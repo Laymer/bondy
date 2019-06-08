@@ -296,7 +296,6 @@ is_feature_enabled(F) when is_binary(F) ->
     maps:get(F, ?DEALER_FEATURES, false).
 
 
-
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
@@ -650,9 +649,12 @@ register(<<"wamp.", _/binary>>, _, _) ->
 
 register(ProcUri, Options, Ctxt) ->
     case bondy_registry:add(registration, ProcUri, Options, Ctxt) of
-        {ok, Details, IsFirst} ->
-            ok = on_register(IsFirst, Details, Ctxt),
-            {ok, Details};
+        {ok, RegDetails, IsFirst} when IsFirst == true ->
+            ok = on_create(RegDetails, Ctxt),
+            {ok, RegDetails};
+        {ok, RegDetails, IsFirst} when IsFirst == false ->
+            ok = on_register(RegDetails, Ctxt),
+            {ok, RegDetails};
         {error, {already_exists, #{match := Policy}}} ->
             {error, {
                 procedure_already_exists,
@@ -1051,21 +1053,75 @@ do_invoke({WAMPStrategy, L}, Fun, Ctxt) ->
 
 
 %% @private
-on_register(true, Map, Ctxt) ->
-    bondy_event_manager:notify({registration_created, Map, Ctxt});
-
-on_register(false, Map, Ctxt) ->
-    bondy_event_manager:notify({registration_added, Map, Ctxt}).
-
-
-%% @private
-on_unregister(Map, Ctxt) ->
-    bondy_event_manager:notify({registration_removed, Map, Ctxt}).
+on_create(RegDetails, Ctxt) ->
+    %% RFC: A wamp.registration.on_register event MUST be fired subsequent to a
+    %% wamp.registration.on_create event, since the first registration results
+    %% in both the creation of the registration and the addition of a session.
+    SessionId = bondy_context:session_id(Ctxt),
+    Args = [SessionId, RegDetails],
+    ok = maybe_publish(?WAMP_REGISTRATION_ON_CREATE, Args, Ctxt),
+    on_register(RegDetails, Ctxt).
 
 
 %% @private
-%% on_delete(Map, Ctxt) ->
-%%     bondy_event_manager:notify({registration_deleted, Map, Ctxt}).
+on_register(RegDetails, Ctxt) ->
+    Uri = ?WAMP_REGISTRATION_ON_REGISTER,
+    maybe_publish(Uri, RegDetails, Ctxt).
+
+
+%% @private
+maybe_publish(Uri, RegDetails, Ctxt) ->
+    %% We publish the WAMP meta event
+    case bondy_context:has_session(Ctxt) of
+        true ->
+            SessionId = bondy_context:session_id(Ctxt),
+            {ok, _} = bondy_broker:publish(
+                #{}, Uri, [SessionId, RegDetails], #{}, Ctxt),
+            ok;
+        false ->
+            ok
+    end,
+
+    %% We notify internally
+    Meta = bondy_context:telemetry_metadata(Ctxt),
+    Event = {[wamp, registration], #{count => 1}, Meta},
+    bondy_event_manager:notify(Event).
+
+
+%% @private
+on_unregister(Object, Ctxt) ->
+    case bondy_context:has_session(Ctxt) of
+        true ->
+            Uri = ?WAMP_REGISTRATION_ON_UNREGISTER,
+            SessionId = bondy_context:session_id(Ctxt),
+            RegId = maps:get(id, Object),
+            {ok, _} = bondy_broker:publish(
+                #{}, Uri, [SessionId, RegId], Object, Ctxt),
+            ok;
+        false ->
+            ok
+    end,
+
+    Meta = bondy_context:telemetry_metadata(Ctxt),
+    bondy_event_manager:notify({[wamp, registration], #{count => -1}, Meta}).
+
+
+%% @private
+%% on_delete(Details, Ctxt) ->
+%%     case bondy_context:has_session(Ctxt) of
+%%         true ->
+%%             Uri = ?WAMP_REGISTRATION_ON_DELETE,
+%%             SessionId = bondy_context:session_id(Ctxt),
+%%             RegId = maps:get(id, Details),
+%%             {ok, _} = bondy_broker:publish(
+%%                 #{}, Uri, [SessionId, RegId], Details, Ctxt),
+%%             ok;
+%%         false ->
+%%             ok
+%%     end,
+
+%%     Meta = bondy_context:telemetry_metadata(Ctxt),
+%%     bondy_event_manager:notify({[wamp, registration], #{count => -1}, Meta}).
 
 
 no_such_procedure(ProcUri, CallId) ->

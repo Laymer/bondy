@@ -618,9 +618,10 @@ start_http(Routes, Name) ->
                 dispatch => cowboy_router:compile(Routes)
             },
             metrics_callback => fun bondy_cowboy_prometheus:observe/1,
-            %% cowboy_metrics_h must be first on the list
             stream_handlers => [
-                cowboy_metrics_h, cowboy_compress_h, cowboy_stream_h
+                %% cowboy_metrics_h must be first on the list
+                cowboy_metrics_h,
+                cowboy_compress_h, cowboy_stream_h
             ],
             middlewares => [
                 cowboy_router,
@@ -778,7 +779,7 @@ admin_base_routes() ->
         {'_', [
             {"/ws", bondy_wamp_ws_handler, #{}},
             {"/ping", bondy_http_ping_handler, #{}},
-            {"/metrics/[:registry]", prometheus_cowboy2_handler, []}
+            {"/metrics/[:registry]", bondy_metrics_rest_handler, []}
         ]}
     ].
 

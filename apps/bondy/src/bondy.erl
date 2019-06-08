@@ -118,6 +118,10 @@ andalso is_pid(Pid) ->
     end.
 
 
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
 -spec send(peer_id(), peer_id(), wamp_message(), map()) -> ok | no_return().
 
 send({RealmUri, _, _, _} = From, {RealmUri, Node, _, _} = To, M, Opts0)
@@ -200,6 +204,7 @@ publish(Opts, TopicUri, Args, ArgsKw, CtxtOrRealm) ->
 %% =============================================================================
 
 
+
 %% -----------------------------------------------------------------------------
 %% @doc
 %% A blocking call.
@@ -260,7 +265,7 @@ call(ProcedureUri, Opts, Args, ArgsKw, Ctxt0) ->
                         ErrorArgs,
                         ErrorArgsKw
                     ),
-                    ok = bondy_event_manager:notify({wamp, Error, Ctxt1}),
+                    ok = notify(Error, Ctxt1),
                     {error, message_to_map(Error), Ctxt1}
             end;
         {reply, #error{} = Error, Ctxt1} ->
@@ -272,11 +277,11 @@ call(ProcedureUri, Opts, Args, ArgsKw, Ctxt0) ->
                 ?CALL, ReqId, #{}, ?BONDY_INCONSISTENCY_ERROR,
                 [<<"Inconsistency error">>]
             ),
-            ok = bondy_event_manager:notify({wamp, Error, Ctxt1}),
+            ok = notify(Error, Ctxt1),
             {error, message_to_map(Error), Ctxt1};
         {stop, #error{} = Error, Ctxt1} ->
             %% A sync reply (should not ever happen with calls)
-            ok = bondy_event_manager:notify({wamp, Error, Ctxt1}),
+            ok = notify(Error, Ctxt1),
             {error, message_to_map(Error), Ctxt1};
         {stop, _, Ctxt1} ->
             %% A sync reply (should not ever happen with calls)
@@ -284,7 +289,7 @@ call(ProcedureUri, Opts, Args, ArgsKw, Ctxt0) ->
                 ?CALL, ReqId, #{}, ?BONDY_INCONSISTENCY_ERROR,
                 [<<"Inconsistency error">>]
             ),
-            ok = bondy_event_manager:notify({wamp, Error, Ctxt1}),
+            ok = notify(Error, Ctxt1),
             {error, message_to_map(Error), Ctxt1}
     end.
 
@@ -303,6 +308,13 @@ call(ProcedureUri, Opts, Args, ArgsKw, Ctxt0) ->
 %% PRIVATE
 %% =============================================================================
 
+
+
+%% @private
+notify(Message, Ctxt) ->
+    Meta0 = bondy_context:telemetry_metadata(Ctxt),
+    Meta1 = maps:put(message, Message, Meta0),
+    bondy_event_manager:notify({[wamp, message], #{count => 1}, Meta1}).
 
 
 validate_send_opts(Opts) ->

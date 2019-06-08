@@ -168,7 +168,7 @@ roles() ->
 %% -----------------------------------------------------------------------------
 agent() ->
     Vsn = list_to_binary(bondy_app:vsn()),
-    <<"LEAPSIGHT-BONDY-", Vsn/binary>>.
+    <<"Bondy/", Vsn/binary>>.
 
 
 %% -----------------------------------------------------------------------------
@@ -195,7 +195,7 @@ forward(M, #{session := _} = Ctxt0) ->
     %% ),
     %% Client has a session so this should be either a message
     %% for broker or dealer roles
-    ok = bondy_event_manager:notify({wamp, M, Ctxt1}),
+    ok = notify(M, Ctxt1),
     do_forward(M, Ctxt1).
 
 
@@ -372,7 +372,7 @@ async_forward(M, Ctxt0) ->
                 [maps:get(<<"message">>, ErrorMap)],
                 #{error => ErrorMap}
             ),
-            ok = bondy_event_manager:notify({wamp, Reply, Ctxt0}),
+            ok = notify(Reply, Ctxt0),
             {reply, Reply, Ctxt0};
         ?EXCEPTION(Class, Reason, Stacktrace) ->
             Ctxt = bondy_context:realm_uri(Ctxt0),
@@ -426,3 +426,9 @@ when Type == ?INVOCATION orelse Type == ?INTERRUPT ->
 sync_forward({M, _Ctxt}) ->
     error({unexpected_message, M}).
 
+
+notify(M, Ctxt) ->
+    Meta0 = bondy_context:telemetry_metadata(Ctxt),
+    Meta1 = maps:put(message, M, Meta0),
+    Event = {[wamp, message], #{count => 1}, Meta1},
+    bondy_event_manager:notify(Event).

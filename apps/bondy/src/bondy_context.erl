@@ -37,56 +37,65 @@
 
 
 -type t()       ::  #{
-    id => id(),
-    %% Realm and Session
+    %% Mandatory
+    id := id(),
+    node := atom(),
+    request_id := maybe_undefined(id()),
+    request_timeout := non_neg_integer(),
+    request_timestamp := maybe_undefined(integer()),
+    request_details := maybe_undefined(map()),
+    request_bytes := maybe_undefined(non_neg_integer()),
+    call_timeout := non_neg_integer(),
+    %% Optional
     realm_uri => uri(),
-    node => atom(),
-    session => bondy_session:session() | undefined,
-    %% Peer Info
-    peer => bondy_session:peer(),
+    session => maybe_undefined(bondy_session:t()), %% TODO Remove, keep session_id
+    session_id => id(),
+    peer => inet:peername(),
+    peername => binary(),
+    transport => transport() | http,
+    frame_type => frame_type(),
+    encoding => encoding(),
     authmethod => binary(),
     authid => binary(),
-    roles => map(),
-    challenge_sent => {true, AuthMethod :: any()} | false,
-    request_id => id(),
-    request_timestamp => integer(),
-    request_timeout => non_neg_integer(),
-    request_details => map(),
-    %% Metadata
-    user_info => map()
+    roles => map()
 }.
 -export_type([t/0]).
 
 -export([agent/1]).
 -export([authid/1]).
+-export([call_timeout/1]).
 -export([close/1]).
+-export([encoding/1]).
 -export([has_session/1]).
 -export([is_feature_enabled/3]).
--export([new/0]).
 -export([local_context/1]).
+-export([new/0]).
 -export([new/2]).
 -export([node/1]).
 -export([peer/1]).
 -export([peer_id/1]).
+-export([peername/1]).
 -export([realm_uri/1]).
+-export([request_bytes/1]).
+-export([request_details/1]).
 -export([request_id/1]).
--export([call_timeout/1]).
--export([set_call_timeout/2]).
 -export([request_timeout/1]).
 -export([request_timestamp/1]).
 -export([reset/1]).
 -export([roles/1]).
 -export([session/1]).
 -export([session_id/1]).
+-export([set_call_timeout/2]).
 -export([set_peer/2]).
+-export([set_realm_uri/2]).
+-export([set_request_bytes/2]).
 -export([set_request_id/2]).
 -export([set_request_timeout/2]).
 -export([set_request_timestamp/2]).
--export([set_subprotocol/2]).
--export([set_realm_uri/2]).
--export([subprotocol/1]).
 -export([set_session/2]).
--export([encoding/1]).
+-export([set_subprotocol/2]).
+-export([subprotocol/1]).
+-export([telemetry_metadata/1]).
 
 
 
@@ -102,13 +111,17 @@
 %% @end
 %% -----------------------------------------------------------------------------
 -spec new() -> t().
+
 new() ->
     #{
         id => bondy_utils:get_id(global),
         node => bondy_peer_service:mynode(),
-        request_id => undefined,
         call_timeout => bondy_config:get(wamp_call_timeout),
-        request_timeout => bondy_config:get(request_timeout)
+        request_details => undefined,
+        request_timestamp => undefined,
+        request_id => undefined,
+        request_bytes => undefined,
+        request_timeout => 0
     }.
 
 
@@ -125,7 +138,8 @@ local_context(RealmUri) when is_binary(RealmUri) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec new(bondy_session:peer(), subprotocol_2()) -> t().
+-spec new(inet:peername(), subprotocol_2()) -> t().
+
 new(Peer, Subprotocol) ->
     set_subprotocol(set_peer(new(), Peer), Subprotocol).
 
@@ -137,12 +151,27 @@ new(Peer, Subprotocol) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec reset(t()) -> t().
+
 reset(Ctxt) ->
     Ctxt#{
+        request_details => undefined,
         request_timestamp => undefined,
         request_id => undefined,
         request_timeout => 0
     }.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+telemetry_metadata(Ctxt) ->
+    Keys = [
+        %% node,
+        realm_uri, session_id, peername, agent, authmethod,
+        transport, frame_type, encoding
+    ],
+    maps:with(Keys, Ctxt).
 
 
 %% -----------------------------------------------------------------------------
@@ -155,22 +184,17 @@ reset(Ctxt) ->
 
 close(Ctxt0) ->
     %% We cleanup router first as cleanup requires the session
-    case maps:find(session, Ctxt0) of
-        {ok, Session} ->
+    try session(Ctxt0) of
+        Session ->
             _ = bondy_router:close_context(Ctxt0),
-            bondy_session:close(Session);
-        error ->
+            bondy_session:close(Session)
+    catch
+        _:_ ->
             ok
     end.
 
 
-%% -----------------------------------------------------------------------------
-%% @doc
-%% Returns the peer of the provided context.
-%% @end
-%% -----------------------------------------------------------------------------
--spec peer(t()) -> bondy_session:peer().
-peer(#{peer := Val}) -> Val.
+
 
 
 %% -----------------------------------------------------------------------------
@@ -179,8 +203,18 @@ peer(#{peer := Val}) -> Val.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec node(t()) -> atom().
+
 node(#{node := Val}) -> Val.
 
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% Returns the peer of the provided context.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec peer(t()) -> inet:peername().
+
+peer(#{peer := Val}) -> Val.
 
 
 %% -----------------------------------------------------------------------------
@@ -188,9 +222,34 @@ node(#{node := Val}) -> Val.
 %% Set the peer to the provided context.
 %% @end
 %% -----------------------------------------------------------------------------
--spec set_peer(t(), bondy_session:peer()) -> t().
+-spec set_peer(t(), inet:peername()) -> t().
+
 set_peer(Ctxt, {{_, _, _, _}, _Port} = Peer) when is_map(Ctxt) ->
-    Ctxt#{peer => Peer}.
+    Ctxt#{
+        peer => Peer,
+        peername => inet_utils:peername_to_binary(Peer)
+    }.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% Returns the peer of the provided context.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec agent(t()) -> maybe_undefined(binary()).
+
+agent(#{agent := Val}) -> Val;
+agent(_) -> undefined.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% Returns the peer of the provided context.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec peername(t()) -> binary().
+
+peername(#{peername := Val}) -> Val.
 
 
 %% -----------------------------------------------------------------------------
@@ -199,6 +258,7 @@ set_peer(Ctxt, {{_, _, _, _}, _Port} = Peer) when is_map(Ctxt) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec subprotocol(t()) -> subprotocol_2().
+
 subprotocol(#{subprotocol := Val}) -> Val.
 
 
@@ -208,6 +268,7 @@ subprotocol(#{subprotocol := Val}) -> Val.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec encoding(t()) -> encoding().
+
 encoding(#{subprotocol := {_, _, Val}}) -> Val.
 
 
@@ -218,8 +279,13 @@ encoding(#{subprotocol := {_, _, Val}}) -> Val.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec set_subprotocol(t(), subprotocol_2()) -> t().
-set_subprotocol(Ctxt, {_, _, _} = S) when is_map(Ctxt) ->
-    Ctxt#{subprotocol => S}.
+
+set_subprotocol(Ctxt, {T, FT, E}) when is_map(Ctxt) ->
+    Ctxt#{
+        transport => T,
+        frame_type => FT,
+        encoding => E
+    }.
 
 
 %% -----------------------------------------------------------------------------
@@ -227,7 +293,8 @@ set_subprotocol(Ctxt, {_, _, _} = S) when is_map(Ctxt) ->
 %% Returns the roles of the provided context.
 %% @end
 %% -----------------------------------------------------------------------------
--spec roles(t()) -> map().
+-spec roles(t()) -> maybe_none(map()).
+
 roles(Ctxt) ->
     bondy_session:roles(session(Ctxt)).
 
@@ -238,6 +305,7 @@ roles(Ctxt) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec realm_uri(t()) -> uri().
+
 realm_uri(#{realm_uri := Val}) -> Val.
 
 
@@ -247,28 +315,17 @@ realm_uri(#{realm_uri := Val}) -> Val.
 %% @end
 %% -----------------------------------------------------------------------------
 -spec set_realm_uri(t(), uri()) -> t().
+
 set_realm_uri(Ctxt, Uri) ->
     Ctxt#{realm_uri => Uri}.
 
 
 %% -----------------------------------------------------------------------------
 %% @doc
-%% Returns the agent of the provided context or 'undefined'
-%% if there is none.
 %% @end
 %% -----------------------------------------------------------------------------
--spec agent(t()) -> binary() | undefined.
-agent(#{session := S}) ->
-    bondy_session:agent(S);
-agent(#{}) ->
-    undefined.
+-spec authid(t()) -> maybe_undefined(binary()).
 
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
--spec authid(t()) -> binary() | undefined.
 authid(#{authid := Val}) -> Val;
 authid(#{}) -> undefined.
 
@@ -279,9 +336,10 @@ authid(#{}) -> undefined.
 %% if there is none.
 %% @end
 %% -----------------------------------------------------------------------------
--spec session_id(t()) -> id() | undefined.
-session_id(#{session := S}) ->
-    bondy_session:id(S);
+-spec session_id(t()) -> maybe_undefined(id()).
+
+session_id(#{session_id := Id}) ->
+    Id;
 session_id(#{}) ->
     undefined.
 
@@ -293,7 +351,8 @@ session_id(#{}) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec has_session(t()) -> boolean().
-has_session(#{session := _}) -> true;
+
+has_session(#{session_id := _}) -> true;
 has_session(#{}) -> false.
 
 
@@ -302,9 +361,16 @@ has_session(#{}) -> false.
 %% Sets the sessionId to the provided context.
 %% @end
 %% -----------------------------------------------------------------------------
--spec set_session(t(), bondy_session:session()) -> t().
+-spec set_session(t(), bondy_session:t()) -> t().
+
 set_session(Ctxt, S) ->
-    Ctxt#{session => S}.
+    Ctxt#{
+        %% TODO Do not set session, just some properties
+        session => S,
+        agent => bondy_session:agent(S),
+        session_id => bondy_session:id(S),
+        peer_id => bondy_session:peer_id(S)
+    }.
 
 
 
@@ -314,9 +380,8 @@ set_session(Ctxt, S) ->
 %% -----------------------------------------------------------------------------
 -spec peer_id(t()) -> peer_id().
 
-peer_id(#{session := S}) ->
-    %% TODO evaluate caching this as it should be immutable
-    bondy_session:peer_id(S).
+peer_id(#{peer_id := PeerId}) ->
+    PeerId.
 
 
 %% -----------------------------------------------------------------------------
@@ -324,9 +389,10 @@ peer_id(#{session := S}) ->
 %% Fetches and returns the bondy_session for the associated sessionId.
 %% @end
 %% -----------------------------------------------------------------------------
--spec session(t()) -> bondy_session:session() | no_return().
-session(#{session := S}) ->
-    S.
+-spec session(t()) -> maybe_none(bondy_session:t()).
+
+session(#{session_id := Id}) ->
+    bondy_session:fetch(Id).
 
 
 %% -----------------------------------------------------------------------------
@@ -335,6 +401,7 @@ session(#{session := S}) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec request_id(t()) -> id().
+
 request_id(#{request_id := Val}) ->
     Val.
 
@@ -344,8 +411,32 @@ request_id(#{request_id := Val}) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec set_request_id(t(), id()) -> t().
+
 set_request_id(Ctxt, ReqId) ->
     Ctxt#{set_request_id => ReqId}.
+
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% Returns the current request id.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec request_bytes(t()) -> maybe_undefined(non_neg_integer()).
+
+request_bytes(#{request_bytes := Val}) ->
+    Val.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% Sets the current request id to the provided context.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec set_request_bytes(t(), non_neg_integer()) -> t().
+
+set_request_bytes(Ctxt, Bytes) ->
+    Ctxt#{set_request_bytes => Bytes}.
 
 
 %% -----------------------------------------------------------------------------
@@ -354,6 +445,7 @@ set_request_id(Ctxt, ReqId) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec request_timeout(t()) -> non_neg_integer().
+
 request_timeout(#{request_timeout := Val}) ->
     Val.
 
@@ -364,6 +456,7 @@ request_timeout(#{request_timeout := Val}) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec set_request_timeout(t(), non_neg_integer()) -> t().
+
 set_request_timeout(Ctxt, Timeout) when is_integer(Timeout), Timeout >= 0 ->
     Ctxt#{request_timeout => Timeout}.
 
@@ -374,6 +467,7 @@ set_request_timeout(Ctxt, Timeout) when is_integer(Timeout), Timeout >= 0 ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec call_timeout(t()) -> non_neg_integer().
+
 call_timeout(#{call_timeout := Val}) ->
     Val.
 
@@ -384,16 +478,18 @@ call_timeout(#{call_timeout := Val}) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec set_call_timeout(t(), non_neg_integer()) -> t().
+
 set_call_timeout(Ctxt, Timeout) when is_integer(Timeout), Timeout >= 0 ->
     Ctxt#{call_timeout => Timeout}.
 
 
 %% -----------------------------------------------------------------------------
 %% @doc
-%% Returns the current request timestamp.
+%% Returns the current request timestamp in native unit
 %% @end
 %% -----------------------------------------------------------------------------
 -spec request_timestamp(t()) -> integer().
+
 request_timestamp(#{request_timestamp := Val}) ->
     Val.
 
@@ -404,8 +500,20 @@ request_timestamp(#{request_timestamp := Val}) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec set_request_timestamp(t(), integer()) -> t().
+
 set_request_timestamp(Ctxt, Timestamp) when is_integer(Timestamp) ->
     Ctxt#{request_timestamp => Timestamp}.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% Returns the current request timestamp in native unit
+%% @end
+%% -----------------------------------------------------------------------------
+-spec request_details(t()) -> maybe_undefined(map()).
+
+request_details(#{request_details := Val}) ->
+    Val.
 
 
 %% -----------------------------------------------------------------------------

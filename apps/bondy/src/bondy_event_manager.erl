@@ -188,6 +188,10 @@ notify(Event) ->
 %% `gen_event:notify(bondy_event_manager, Event)'
 %% @end
 %% -----------------------------------------------------------------------------
+notify(Manager, Events) when is_list(Events) ->
+    _ = [notify(Manager, Event) || Event <- Events],
+    ok;
+
 notify(Manager, Event) ->
     gen_event:notify(Manager, Event).
 
@@ -206,5 +210,9 @@ sync_notify(Event) ->
 %% `gen_event:sync_notify(bondy_event_manager, Event)'
 %% @end
 %% -----------------------------------------------------------------------------
+sync_notify(Manager, Events) when is_list(Events) ->
+    _ = [sync_notify(Manager, Event) || Event <- Events],
+    ok;
+
 sync_notify(Manager, Event) ->
     gen_event:sync_notify(Manager, Event).

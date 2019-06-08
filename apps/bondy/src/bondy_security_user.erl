@@ -112,8 +112,7 @@ update(RealmUri, Username, User0) when is_binary(Username) ->
             {error, _} = Error ->
                 Error;
             ok ->
-                ok = bondy_event_manager:notify(
-                    {security_user_updated, RealmUri, Username}),
+                ok = on_update(RealmUri, Username),
                 {ok, fetch(RealmUri, Username)}
         end
     catch
@@ -170,9 +169,7 @@ remove(RealmUri, #{<<"username">> := Username}) ->
 remove(RealmUri, Username) ->
     case bondy_security:del_user(RealmUri, Username) of
         ok ->
-            ok = bondy_event_manager:notify(
-                    {security_user_deleted, RealmUri, Username}),
-            ok;
+            on_delete(RealmUri, Username);
         {error, _} = Error ->
             Error
     end.
@@ -256,8 +253,7 @@ password(RealmUri, Username) ->
 change_password(RealmUri, Username, New) when is_binary(New) ->
     case update(RealmUri, Username, #{<<"password">> => New}) of
         {ok, _} ->
-            bondy_event_manager:notify(
-                {security_password_changed, RealmUri, Username});
+            on_change_password(RealmUri, Username);
         Error ->
             Error
     end.
@@ -298,8 +294,7 @@ do_add(RealmUri, User) ->
 
     case bondy_security:add_user(RealmUri, Username, PL) of
         ok ->
-            ok = bondy_event_manager:notify(
-                {security_user_added, RealmUri, Username}),
+            ok = on_add(RealmUri, Username),
             {ok, fetch(RealmUri, Username)};
         Error ->
             Error
@@ -335,3 +330,37 @@ has_password(Opts) ->
 ok_or_error({ok, _}) -> ok;
 ok_or_error(Term) -> Term.
 
+
+%% @private
+on_add(RealmUri, Username) ->
+    Uri = ?USER_ADDED,
+    _ = bondy:publish(
+        #{}, Uri, [RealmUri, Username], #{}, ?BONDY_PRIV_REALM_URI),
+    _ = bondy:publish(#{}, Uri, [Username], #{}, RealmUri),
+    ok.
+
+
+%% @private
+on_update(RealmUri, Username) ->
+    _ = bondy:publish(
+        #{}, ?USER_UPDATED, [RealmUri, Username], #{}, ?BONDY_PRIV_REALM_URI),
+    _ = bondy:publish(#{}, ?USER_UPDATED, [Username], #{}, RealmUri),
+    ok.
+
+
+%% @private
+on_delete(RealmUri, Username) ->
+    _ = bondy:publish(
+        #{}, ?USER_DELETED, [RealmUri, Username], #{}, ?BONDY_PRIV_REALM_URI),
+    _ = bondy:publish(#{}, ?USER_DELETED, [Username], #{}, RealmUri),
+    ok.
+
+
+%% @private
+on_change_password(RealmUri, Username) ->
+    %% We republish to the bondy root admin realm
+    _ = bondy:publish(
+        #{}, ?PASSWORD_CHANGED, [RealmUri, Username], #{}, ?BONDY_PRIV_REALM_URI
+    ),
+    _ = bondy:publish(#{}, ?PASSWORD_CHANGED, [Username], #{}, RealmUri),
+    ok.

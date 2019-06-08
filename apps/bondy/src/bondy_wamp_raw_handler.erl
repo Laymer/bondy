@@ -45,7 +45,7 @@
     ping_attempts = 0       ::  non_neg_integer(),
     ping_max_attempts = 2   ::  non_neg_integer(),
     hibernate = false       ::  boolean(),
-    start_time              ::  integer(),
+    start_time              ::  non_neg_integer(),
     protocol_state          ::  bondy_wamp_protocol:state() | undefined,
     buffer = <<>>           ::  binary()
 }).
@@ -142,6 +142,7 @@ start_link(Ref, Socket, Transport, Opts) ->
 connections() ->
     tls_connections() ++ tcp_connections().
 
+
 tls_connections() ->
     ranch:procs(?TLS, connections).
 
@@ -167,10 +168,10 @@ init({Ref, Socket, Transport, _Opts0}) ->
     {ok, Peername} = inet:peername(Socket),
 
     St = #state{
-        start_time = erlang:monotonic_time(second),
         socket = Socket,
         peername = inet_utils:peername_to_binary(Peername),
-        transport = Transport
+        transport = Transport,
+        start_time = erlang:monotonic_time()
     },
     ok = socket_opened(St),
     gen_server:enter_loop(?MODULE, [], St, ?TIMEOUT).
@@ -207,6 +208,7 @@ handle_info({tcp, Socket, Data}, #state{socket = Socket} = St0) ->
     %% We append the newly received data to the existing buffer
     Buffer = St0#state.buffer,
     St1 = St0#state{buffer = <<>>},
+
     case handle_data(<<Buffer/binary, Data/binary>>, St1) of
         {ok, St2} ->
             (St2#state.transport):setopts(Socket, [{active, once}]),
@@ -375,7 +377,7 @@ when byte_size(Data) >= Len ->
     end;
 
 handle_data(<<0:5, 1:3, Len:24, Data/binary>>, St) ->
-    %% We received a PING, send a PONG
+    %% We received a PING, synchronously send a PONG and continue handling data
     <<Payload:Len/binary, Rest/binary>> = Data,
     ok = send_frame(<<0:5, 2:3, Len:24, Payload/binary>>, St),
     handle_data(Rest, St);
@@ -678,21 +680,40 @@ when is_binary(Prefix) orelse is_list(Prefix), is_list(Head) ->
 
 
 %% @private
+meta(St) ->
+    #{
+        protocol => wamp,
+        transport => raw,
+        peername => St#state.peername
+    }.
+
+
+%% @private
 socket_opened(St) ->
-    Event = {socket_open, wamp, raw, St#state.peername},
+    Event = {[socket, opened], #{count => 1}, meta(St)},
     bondy_event_manager:notify(Event).
 
 
 %% @private
-socket_closed(true, St) ->
-    Event = {socket_error, wamp, raw, St#state.peername},
-    ok = bondy_event_manager:notify(Event),
-    socket_closed(false, St);
+socket_closed(IsError, St) ->
+    Now = erlang:monotonic_time(),
+    Diff = St#state.start_time - Now,
+    Ms = erlang:convert_time_unit(Diff, native, millisecond),
+    Measures = #{count => 1, duration => Ms},
+    Meta = meta(St),
 
-socket_closed(false, St) ->
-    Seconds = erlang:monotonic_time(second) - St#state.start_time,
-    Event = {socket_closed, wamp, raw, St#state.peername, Seconds},
-    bondy_event_manager:notify(Event).
+    Events = case IsError of
+        true ->
+            [
+                {[socket, error], Measures, Meta},
+                {[socket, closed], Measures, Meta}
+            ];
+        false ->
+            [
+                {[socket, closed], Measures, Meta}
+            ]
+    end,
+    bondy_event_manager:notify(Events).
 
 
 %% @private

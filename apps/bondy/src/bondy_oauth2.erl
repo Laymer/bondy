@@ -102,7 +102,7 @@
 
 -type token()           ::  #bondy_oauth2_token{}.
 -type grant_type()      ::  client_credentials | password | authorization_code.
--type error()           ::  oauth2_invalid_grant | no_such_realm.
+-type reason()          ::  oauth2_invalid_grant | no_such_realm.
 -type token_type()      ::  access_token | refresh_token.
 
 -export_type([error/0]).
@@ -472,7 +472,7 @@ decode_jwt(JWT) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec verify_jwt(binary(), binary()) ->
-    {ok, map()} | {error, error()}.
+    {ok, map()} | {error, reason()}.
 
 verify_jwt(RealmUri, JWT) ->
     verify_jwt(RealmUri, JWT, #{}).
@@ -483,7 +483,7 @@ verify_jwt(RealmUri, JWT) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec verify_jwt(binary(), binary(), map()) ->
-    {ok, map()} | {error, error()}.
+    {ok, map()} | {error, reason()}.
 
 verify_jwt(RealmUri, JWT, Match0) ->
     Match1 = Match0#{<<"aud">> => RealmUri},
@@ -647,7 +647,7 @@ sign(Key, Claims) ->
 
 
 %% @private
--spec do_verify_jwt(binary(), map()) -> {ok, map()} | {error, error()}.
+-spec do_verify_jwt(binary(), map()) -> {ok, map()} | {error, reason()}.
 do_verify_jwt(JWT, Match) ->
     try
         {jose_jwt, Map} = jose_jwt:peek(JWT),

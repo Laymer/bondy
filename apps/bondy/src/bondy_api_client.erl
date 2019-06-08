@@ -112,7 +112,7 @@ add(RealmUri, Info0) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec update(uri(), binary(), map()) -> ok| {error, term()} | no_return().
+-spec update(uri(), binary(), map()) -> ok | {error, term()} | no_return().
 
 update(RealmUri, ClientId, Info0) ->
     bondy_security_user:update(

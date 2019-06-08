@@ -32,7 +32,7 @@
     call_id                                 ::  id() | undefined,
     caller                                  ::  peer_id(),
     callee                                  ::  peer_id(),
-    timestamp                               :: integer()
+    timestamp                               ::  non_neg_integer()
 }).
 
 

@@ -336,7 +336,7 @@ delete(Uri) ->
             {error, active_users};
         false ->
             plum_db:delete(?PREFIX, Uri),
-            ok = bondy_event_manager:notify({realm_deleted, Uri}),
+            ok = on_delete(Uri),
             %% TODO we need to close all sessions for this realm
             ok
     end.
@@ -519,7 +519,7 @@ do_add(Map) ->
     },
     Realm1 = set_keys(Realm0, KeyList),
     ok = plum_db:put(?PREFIX, Uri, Realm1),
-    ok = bondy_event_manager:notify({realm_added, Uri}),
+    ok = on_add(Uri),
     init(Realm1, SecurityEnabled).
 
 
@@ -540,6 +540,18 @@ do_update(Realm0, Map) ->
     Realm2 = set_keys(Realm1, KeyList),
     ok = maybe_enable_security(SecurityEnabled, Realm2),
     Realm2.
+
+
+%% @private
+on_add(Uri) ->
+    _ = bondy:publish(#{}, ?REALM_ADDED, [Uri], #{}, ?BONDY_PRIV_REALM_URI),
+    ok.
+
+
+%% @private
+on_delete(Uri) ->
+    _ = bondy:publish(#{}, ?REALM_DELETED, [Uri], #{}, ?BONDY_PRIV_REALM_URI),
+    ok.
 
 
 %% @private

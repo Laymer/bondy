@@ -88,7 +88,7 @@ update(RealmUri, Name, Group0) when is_binary(Name) ->
     try
         Group1 = maps_utils:validate(Group0, ?GROUP_UPDATE_SPEC),
         bondy_security:alter_group(RealmUri, Name, maps:to_list(Group1)),
-        bondy_event_manager:notify({security_group_updated, RealmUri, Name})
+        on_update(RealmUri, Name)
     catch
         ?EXCEPTION(error, Reason, _) ->
             {error, Reason}
@@ -103,8 +103,7 @@ update(RealmUri, Name, Group0) when is_binary(Name) ->
 remove(RealmUri, Name) when is_binary(Name) ->
     case bondy_security:del_group(RealmUri, Name) of
         ok ->
-            bondy_event_manager:notify(
-                {security_group_deleted, RealmUri, Name});
+            on_delete(RealmUri, Name);
         {error, {unknown_group, Name}} ->
             {error, unknown_group}
     end.
@@ -161,7 +160,7 @@ do_add(RealmUri, Group) ->
     {#{<<"name">> := Name}, NewGroup} = maps_utils:split([<<"name">>], Group),
     Opts = maps:to_list(bondy_utils:to_binary_keys(NewGroup)),
     bondy_security:add_group(RealmUri, Name, Opts),
-    bondy_event_manager:notify({security_group_added, RealmUri, Name}).
+    on_add(RealmUri, Name).
 
 
 %% @private
@@ -175,3 +174,30 @@ to_map({Name, PL}) ->
 %% @private
 ok_or_error({ok, _}) -> ok;
 ok_or_error(Term) -> Term.
+
+
+%% @private
+on_add(RealmUri, Name) ->
+    _ = [
+        _ = bondy:publish(#{}, ?GROUP_ADDED, [RealmUri, Name], #{}, R)
+        || R <- [RealmUri, ?BONDY_PRIV_REALM_URI]
+    ],
+    ok.
+
+
+%% @private
+on_update(RealmUri, Name) ->
+    _ = [
+        _ = bondy:publish(#{}, ?GROUP_UPDATED, [RealmUri, Name], #{}, R)
+        || R <- [RealmUri, ?BONDY_PRIV_REALM_URI]
+    ],
+    ok.
+
+
+%% @private
+on_delete(RealmUri, Name) ->
+    _ = [
+        _ = bondy:publish(#{}, ?GROUP_DELETED, [RealmUri, Name], #{}, R)
+        || R <- [RealmUri, ?BONDY_PRIV_REALM_URI]
+    ],
+    ok.

@@ -255,23 +255,23 @@ handle_cast(_Event, State) ->
 
 handle_info({backup_reply, ok, Pid}, #state{pid = Pid} = State) ->
     Secs = erlang:system_time(second) - State#state.timestamp,
-    ok = notify_backup_finished([State#state.filename, Secs]),
+    ok = on_backup_finished([State#state.filename, Secs]),
     {noreply, State#state{status = undefined, pid = undefined}};
 
 handle_info({backup_reply, {error, Reason}, Pid}, #state{pid = Pid} = State) ->
     Secs = erlang:system_time(second) - State#state.timestamp,
-    ok = notify_backup_error([Reason, State#state.filename, Secs]),
+    ok = on_backup_error([Reason, State#state.filename, Secs]),
     {noreply, State#state{status = undefined, pid = undefined}};
 
 handle_info({restore_reply, {ok, Counters}, Pid}, #state{pid = Pid} = State) ->
     #{read_count := N, merged_count := M} = Counters,
     Secs = erlang:system_time(second) - State#state.timestamp,
-    ok = notify_restore_finished([State#state.filename, Secs, N, M]),
+    ok = on_restore_finished([State#state.filename, Secs, N, M]),
     {noreply, State#state{status = undefined, pid = undefined}};
 
 handle_info({restore_reply, {error, Reason}, Pid}, #state{pid = Pid} = State) ->
     Secs = erlang:system_time(second) - State#state.timestamp,
-    ok = notify_restore_error([State#state.filename, Reason, Secs]),
+    ok = on_restore_error([State#state.filename, Reason, Secs]),
     {noreply, State#state{status = undefined, pid = undefined}};
 
 
@@ -335,7 +335,7 @@ do_backup(File, Ts) ->
 
     case disk_log:open(Opts) of
         {ok, Log} ->
-            _ = notify_backup_started(File),
+            _ = on_backup_started(File),
             build_backup(Log);
         {error, _} = Error ->
             Error
@@ -664,27 +664,32 @@ do_read_head(Log, Acc0) ->
 
 
 %% @private
-notify_backup_started(File) ->
+on_backup_started(File) ->
     _ = lager:info("Started backup; filename=~p", [File]),
-    bondy_event_manager: notify({backup_started, File}).
+    _ = bondy:publish(
+        #{}, ?BACKUP_STARTED, [File], #{}, ?BONDY_PRIV_REALM_URI
+    ),
+    ok.
 
 
 %% @private
-notify_backup_finished(Args) when length(Args) == 2 ->
+on_backup_finished(Args) when length(Args) == 2 ->
     _ = lager:info(
         "Finished creating backup; filename=~p, elapsed_time_secs=~p",
         Args
     ),
-    bondy_event_manager: notify({backup_finished, Args}).
+    _ = bondy:publish(#{}, ?BACKUP_FINISHED, Args, #{}, ?BONDY_PRIV_REALM_URI),
+    ok.
 
 
 %% @private
-notify_backup_error(Args) when length(Args) == 3 ->
+on_backup_error(Args) when length(Args) == 3 ->
     _ = lager:error(
         "Error creating backup; filename=~p, reason=~p, elapsed_time_secs=~p",
         Args
     ),
-    bondy_event_manager: notify({backup_finished, Args}).
+    _ = bondy:publish(#{}, ?BACKUP_ERROR, Args, #{}, ?BONDY_PRIV_REALM_URI),
+    ok.
 
 
 %% @private
@@ -693,22 +698,29 @@ notify_restore_started([Filename, _, _] = Args) ->
         "Backup restore started; filename=~p, recovered=~p, bad_bytes=~p",
         Args
     ),
-    bondy_event_manager: notify({backup_restore_started, Filename}).
+    _ = bondy:publish(
+        #{}, ?RESTORE_STARTED, [Filename], #{}, ?BONDY_PRIV_REALM_URI
+    ),
+    ok.
 
 
 %% @private
-notify_restore_finished(Args) when length(Args) == 4 ->
+on_restore_finished(Args) when length(Args) == 4 ->
     _ = lager:info(
         "Backup restore finished; filename=~p, elapsed_time_secs=~p, read_count=~p, merged_count=~p",
         Args
     ),
-    bondy_event_manager: notify({backup_restore_finished, Args}).
+    _ = bondy:publish(
+        #{}, ?RESTORE_FINISHED, [Args], #{}, ?BONDY_PRIV_REALM_URI
+    ),
+    ok.
 
 
 %% @private
-notify_restore_error(Args)  when length(Args) == 3 ->
+on_restore_error(Args)  when length(Args) == 3 ->
     _ = lager:info(
         "Backup restore error; filename=~p, reason=~p, elapsed_time_secs=~p",
         Args
     ),
-    bondy_event_manager: notify({backup_restore_error, Args}).
+    _ = bondy:publish(#{}, ?RESTORE_ERROR, Args, #{}, ?BONDY_PRIV_REALM_URI),
+    ok.

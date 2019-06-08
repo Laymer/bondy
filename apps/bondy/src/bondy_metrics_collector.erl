@@ -1,5 +1,5 @@
 %% =============================================================================
-%%  bondy_prometheus_collector.erl -
+%%  bondy_metrics_collector.erl -
 %%
 %%  Copyright (c) 2016-2019 Ngineo Limited t/a Leapsight. All rights reserved.
 %%
@@ -20,7 +20,7 @@
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--module(bondy_prometheus_collector).
+-module(bondy_metrics_collector).
 -behaviour(prometheus_collector).
 
 -export([deregister_cleanup/1]).

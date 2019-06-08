@@ -113,41 +113,40 @@
     %% If owner of the session.
     %% This is either pid of the TCP or WS handler process or
     %% the cowboy handler.
-    pid = self()                    ::  pid() | undefined,
+    pid = self()                    ::  maybe_undefined(pid()),
     %% The {IP, Port} of the client
-    peer                            ::  peer() | undefined,
+    peer                            ::  maybe_undefined(inet:peername()),
+    peername                        ::  maybe_undefined(binary()),
     %% User-Agent HTTP header or WAMP equivalent
     agent                           ::  binary(),
     %% Sequence number used for ID generation
     seq = 0                         ::  non_neg_integer(),
     %% Peer WAMP Roles played by peer
-    roles                           ::  map() | undefined,
+    roles                           ::  maybe_undefined(map()),
     %% WAMP Auth
-    authid                          ::  binary() | undefined,
-    authrole                        ::  binary() | undefined,
-    authmethod                      ::  binary() | undefined,
+    authid                          ::  maybe_undefined(binary()),
+    authrole                        ::  maybe_undefined(binary()),
+    authmethod                      ::  maybe_undefined(binary()),
     %% Expiration and Limits
+    created_ts                      ::  non_neg_integer(),
     created                         ::  calendar:date_time(),
     expires_in                      ::  pos_integer() | infinity,
     rate = ?DEFAULT_RATE            ::  rate_window(),
     quota = ?DEFAULT_QUOTA          ::  quota_window()
 }).
 
--type peer()                    ::  {inet:ip_address(), inet:port_number()}.
--type session()                 ::  #session{}.
+-type t()                       ::  #session{}.
 -type session_opts()            ::  #{roles => map()}.
 -type details()                 ::  #{
-                                        session => id(),
-                                        authid => id(),
-                                        authrole => binary(),
-                                        authmethod => binary(),
-                                        authprovider => binary(),
-                                        transport => #{
-                                            peername => binary()
+                                        session := id(),
+                                        authid := id(),
+                                        authrole := binary(),
+                                        authmethod := binary(),
+                                        authprovider := binary(),
+                                        transport := #{
+                                            peername := binary()
                                         }
                                     }.
-
--export_type([peer/0]).
 
 -export([agent/1]).
 -export([close/1]).
@@ -165,6 +164,7 @@
 -export([open/3]).
 -export([open/4]).
 -export([peer/1]).
+-export([peername/1]).
 -export([peer_id/1]).
 -export([pid/1]).
 -export([realm_uri/1]).
@@ -184,12 +184,14 @@
 %% API
 %% =============================================================================
 
+
+
 %% -----------------------------------------------------------------------------
 %% @doc Creates a new transient session (not persisted)
 %% @end
 %% -----------------------------------------------------------------------------
--spec new(peer(), uri() | bondy_realm:realm(), session_opts()) ->
-    session() | no_return().
+-spec new(inet:peername(), uri() | bondy_realm:realm(), session_opts()) ->
+    maybe_none(t()).
 
 new(Peer, RealmUri, Opts) when is_binary(RealmUri) ->
     new(bondy_utils:get_id(global), Peer, bondy_realm:fetch(RealmUri), Opts);
@@ -198,8 +200,12 @@ new(Peer, Realm, Opts) when is_map(Opts) ->
     new(bondy_utils:get_id(global), Peer, Realm, Opts).
 
 
--spec new(id(), peer(), uri() | bondy_realm:realm(), session_opts()) ->
-    session() | no_return().
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec new(id(), inet:peername(), uri() | bondy_realm:realm(), session_opts()) ->
+    maybe_none(t()).
 
 new(Id, Peer, RealmUri, Opts) when is_binary(RealmUri) ->
     new(Id, Peer, bondy_realm:fetch(RealmUri), Opts);
@@ -211,6 +217,7 @@ new(Id, Peer, Realm, Opts) when is_map(Opts) ->
         peer = Peer,
         realm_uri = RealmUri,
         node = bondy_peer_service:mynode(),
+        created_ts = erlang:monotonic_time(),
         created = calendar:local_time()
     },
     parse_details(Opts, S0).
@@ -223,8 +230,8 @@ new(Id, Peer, Realm, Opts) when is_map(Opts) ->
 %% It calls {@link bondy_utils:get_realm/1} which will fail with an exception
 %% if the realm does not exist or cannot be created
 %% -----------------------------------------------------------------------------
--spec open(peer(), uri() | bondy_realm:realm(), session_opts()) ->
-    session() | no_return().
+-spec open(inet:peername(), uri() | bondy_realm:realm(), session_opts()) ->
+    maybe_none(t()).
 
 open(Peer, RealmUri, Opts) when is_binary(RealmUri) ->
     open(bondy_utils:get_id(global), Peer, bondy_realm:fetch(RealmUri), Opts);
@@ -240,8 +247,10 @@ open(Peer, Realm, Opts) when is_map(Opts) ->
 %% It calls {@link bondy_utils:get_realm/1} which will fail with an exception
 %% if the realm does not exist or cannot be created
 %% -----------------------------------------------------------------------------
--spec open(id(), peer(), uri() | bondy_realm:realm(), session_opts()) ->
-    session() | no_return().
+-spec open(
+    id(), inet:peername(), uri() | bondy_realm:realm(), session_opts()) ->
+    maybe_none(t()).
+
 open(Id, Peer, RealmUri, Opts) when is_binary(RealmUri) ->
     open(Id, Peer, bondy_realm:fetch(RealmUri), Opts);
 
@@ -252,8 +261,15 @@ open(Id, Peer, Realm, Opts) when is_map(Opts) ->
 
     case ets:insert_new(table(Id), S1) of
         true ->
-            ok = bondy_event_manager:notify(
-                {session_opened, RealmUri, Id, Agent, Peer}),
+            Meta = #{
+                realm => RealmUri,
+                session_id => Id,
+                agent => Agent,
+                peer => Peer,
+                peername => inet_utils:peername_to_binary(Peer)
+            },
+            Measures = #{count => 1},
+            ok = bondy_event_manager:notify({[session, opened], Measures, Meta}),
             S1;
         false ->
             error({integrity_constraint_violation, Id})
@@ -264,7 +280,8 @@ open(Id, Peer, Realm, Opts) when is_map(Opts) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec update(session()) -> ok.
+-spec update(t()) -> ok.
+
 update(#session{id = Id} = S) ->
     true = ets:insert(table(Id), S),
     ok.
@@ -274,15 +291,23 @@ update(#session{id = Id} = S) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec close(session()) -> ok.
+-spec close(t()) -> ok.
 
 close(#session{id = Id} = S) ->
     Realm = S#session.realm_uri,
     Agent = S#session.agent,
-    Peer = S#session.peer,
-    Secs = calendar:datetime_to_gregorian_seconds(calendar:local_time()) - calendar:datetime_to_gregorian_seconds(S#session.created),
-    ok = bondy_event_manager:notify(
-        {session_closed, Id, Realm, Agent, Peer, Secs}),
+    Peername = S#session.peername,
+    Now = erlang:monotonic_time(),
+    Diff = S#session.created_ts - Now,
+    Ms = erlang:convert_time_unit(Diff, native, millisecond),
+    Measures = #{count => 1, duration => Ms},
+    Meta = #{
+        realm_uri => Realm,
+        session_id => Id,
+        peername => Peername,
+        agent => Agent
+    },
+    ok = bondy_event_manager:notify({[session, closed], Measures, Meta}),
     true = ets:delete(table(Id), Id),
     _ = lager:debug("Session closed; session_id=~p, realm=~s", [Id, Realm]),
     ok;
@@ -298,7 +323,7 @@ close(Id) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec id(session()) -> id().
+-spec id(t()) -> id().
 
 id(#session{id = Id}) ->
     Id.
@@ -308,7 +333,7 @@ id(#session{id = Id}) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec realm_uri(id() | session()) -> uri().
+-spec realm_uri(id() | t()) -> uri().
 
 realm_uri(#session{realm_uri = Val}) ->
     Val;
@@ -322,7 +347,7 @@ realm_uri(Id) when is_integer(Id) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec roles(id() | session()) -> map().
+-spec roles(id() | t()) -> map().
 
 roles(#session{roles = Val}) ->
     Val;
@@ -336,7 +361,7 @@ roles(Id) ->
 %% @doc Returns the identifier for the owner of this session
 %% @end
 %% -----------------------------------------------------------------------------
--spec peer_id(session()) -> local_peer_id().
+-spec peer_id(t()) -> local_peer_id().
 
 peer_id(#session{} = S) ->
     {
@@ -356,7 +381,7 @@ peer_id(Id) when is_integer(Id) ->
 %% identified by Id runs on.
 %% @end
 %% -----------------------------------------------------------------------------
--spec pid(session()) -> pid().
+-spec pid(t()) -> pid().
 
 pid(#session{pid = Pid}) ->
     Pid;
@@ -370,7 +395,7 @@ pid(Id) when is_integer(Id) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec created(session()) -> calendar:date_time().
+-spec created(t()) -> calendar:date_time().
 
 created(#session{created = Val}) ->
     Val;
@@ -384,7 +409,7 @@ created(Id) when is_integer(Id) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec agent(session()) -> binary() | undefined.
+-spec agent(t()) -> maybe_undefined(binary()).
 
 agent(#session{agent = Val}) ->
     Val;
@@ -398,7 +423,7 @@ agent(Id) when is_integer(Id) ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec peer(session()) -> peer().
+-spec peer(t()) -> inet:peername().
 
 peer(#session{peer = Val}) ->
     Val;
@@ -410,9 +435,20 @@ peer(Id) when is_integer(Id) ->
 
 %% -----------------------------------------------------------------------------
 %% @doc
+%% Returns the peername.
 %% @end
 %% -----------------------------------------------------------------------------
--spec incr_seq(id() | session()) -> map().
+-spec peername(t()) -> binary().
+
+peername(#{peername := Val}) -> Val.
+
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec incr_seq(id() | t()) -> map().
 
 incr_seq(#session{id = Id}) ->
     incr_seq(Id);
@@ -439,7 +475,7 @@ size() ->
 %% if it doesn't exist.
 %% @end
 %% -----------------------------------------------------------------------------
--spec lookup(id()) -> session() | {error, not_found}.
+-spec lookup(id()) -> t() | {error, not_found}.
 
 lookup(Id) ->
     case do_lookup(Id) of
@@ -456,7 +492,7 @@ lookup(Id) ->
 %% does not exist it fails with reason '{badarg, Id}'.
 %% @end
 %% -----------------------------------------------------------------------------
--spec fetch(id()) -> session() | no_return().
+-spec fetch(id()) -> maybe_none(t()).
 
 fetch(Id) ->
     case lookup(Id) of
@@ -512,7 +548,7 @@ list_peer_ids(RealmUri, N) when is_integer(N), N >= 1 ->
 %% @doc
 %% @end
 %% -----------------------------------------------------------------------------
--spec to_details_map(session()) -> details().
+-spec to_details_map(t()) -> details().
 
 to_details_map(#session{} = S) ->
     #{
@@ -601,7 +637,7 @@ table(Id) ->
 
 
 %% @private
--spec do_lookup(id()) -> session() | {error, not_found}.
+-spec do_lookup(id()) -> t() | {error, not_found}.
 
 do_lookup(Id) ->
     Tab = table(Id),
@@ -672,3 +708,4 @@ do_list_peer_ids({continuation, Tabs, RealmUri, N, Cont}) ->
             end,
             {L, FunCont}
     end.
+

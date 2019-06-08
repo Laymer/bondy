@@ -134,9 +134,11 @@
     SessionId   ::  integer() | undefined,
     Pid         ::  pid() | list() |undefined
 }.
--type peer_id()         ::  local_peer_id() | remote_peer_id().
-
-
+-type peer_id()             ::  local_peer_id() | remote_peer_id().
+-type error()               ::  {error, Reason :: any()}.
+-type maybe_undefined(T)    ::  T | undefined.
+%% -type maybe_error(T)        ::  T | error().
+-type maybe_none(T)         ::  T | no_return().
 
 
 

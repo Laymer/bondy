@@ -192,7 +192,7 @@ dispatch_metrics(#{req_start := ReqStart,
   RequestLabels = request_labels(Metrics),
   inc(bondy_http_requests_total, RequestLabels),
   inc(bondy_http_spawned_processes_total, RequestLabels, maps:size(Procs)),
-  observe(cowboy_request_duration_seconds, RequestLabels, ReqEnd - ReqStart),
+  observe(bondy_http_request_duration_seconds, RequestLabels, ReqEnd - ReqStart),
   case ReqBodyEnd of
     undefined -> ok;
     _ -> observe(bondy_receive_body_duration_seconds, RequestLabels,

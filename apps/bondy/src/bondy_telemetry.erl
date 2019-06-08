@@ -37,26 +37,16 @@
     transport, frame_type, encoding
 ]).
 
-
 %% Used by promethues METRIC_NAME macro
 -define(METRIC_NAME_PREFIX, "bondy_").
 
--define(WAMP_MESSAGE_LABELS, [
-    realm, node, session_id, agent, peername, protocol, transport, frame_type, encoding
-]).
-
 -record(state, {}).
+
+
 
 %% API
 -export([record/3]).
 -export([report/0]).
--export([days_duration_buckets/0]).
--export([hours_duration_buckets/0]).
--export([minutes_duration_buckets/0]).
--export([seconds_duration_buckets/0]).
--export([milliseconds_duration_buckets/0]).
--export([microseconds_duration_buckets/0]).
-
 
 %% PROMETHEUS_COLLECTOR CALLBACKS
 -export([deregister_cleanup/1]).
@@ -917,57 +907,6 @@ tags(_) ->
 %%     ok = prometheus_counter:inc(Metric, AllLabels),
 %%     prometheus_histogram:observe(bondy_wamp_message_bytes, Labels, Size).
 
-
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-days_duration_buckets() ->
-    [0, 1, 2, 3, 4, 5, 10, 15, 30].
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-hours_duration_buckets() ->
-    [0, 1, 2, 3, 4, 5, 10, 12, 24, 48, 72].
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-minutes_duration_buckets() ->
-    [0, 1, 2, 3, 4, 5, 10, 15, 30].
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-seconds_duration_buckets() ->
-    [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 60, 90, 180, 300, 600, 1800, 3600].
-
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-milliseconds_duration_buckets() ->
-    [0, 1, 2, 5, 10, 15,
-      25, 50, 75, 100, 150, 200, 250, 300, 400,
-      500, 750, 1000, 1500, 2000, 2500, 3000, 4000, 5000].
-
-%% -----------------------------------------------------------------------------
-%% @doc
-%% @end
-%% -----------------------------------------------------------------------------
-microseconds_duration_buckets() ->
-    [10, 25, 50, 100, 250, 500,
-      1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000,
-      1000000, 2500000, 5000000, 10000000].
 
 
 

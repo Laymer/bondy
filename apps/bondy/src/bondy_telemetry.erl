@@ -276,7 +276,7 @@ handle_wamp_event(#yield{}, #{count := N}, Meta, State) ->
 
 
 setup() ->
-    ok = bondy_cowboy_prometheus:setup(),
+    ok = bondy_telemetry_http_metrics:setup(),
     ok = setup_oc(),
     %% ok = declare_metrics(),
     %% ok = declare_net_metrics(),

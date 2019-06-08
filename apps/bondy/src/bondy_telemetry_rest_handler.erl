@@ -3,7 +3,7 @@
 %% @end
 
 %% From https://github.com/deadtrickster/prometheus-cowboy/blob/master/src/prometheus_cowboy2_handler.erl
--module(bondy_metrics_rest_handler).
+-module(bondy_telemetry_rest_handler).
 
 %% -behaviour(cowboy_handler).
 

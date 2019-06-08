@@ -95,7 +95,7 @@
 %% Replaces
 %% -module(prometheus_cowboy2_instrumenter).
 
--module(bondy_cowboy_prometheus).
+-module(bondy_telemetry_http_metrics).
 
 
 -export([setup/0]).

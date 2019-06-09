@@ -78,6 +78,8 @@ start(_Type, Args) ->
     %% until we are ready to do it
     ok = disable_aae(),
 
+    ok = bondy_telemetry:setup(),
+
     case bondy_sup:start_link() of
         {ok, Pid} ->
             %% Please do not change the order of this function calls

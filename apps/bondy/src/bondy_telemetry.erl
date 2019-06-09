@@ -47,6 +47,9 @@
 %% API
 -export([record/3]).
 -export([report/0]).
+-export([setup/0]).
+-export([latency_distribution/0]).
+-export([byte_size_distribution/0]).
 
 %% PROMETHEUS_COLLECTOR CALLBACKS
 -export([deregister_cleanup/1]).
@@ -69,6 +72,46 @@
 %% =============================================================================
 
 
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec setup() -> ok | no_return().
+
+setup() ->
+    ok = bondy_telemetry_http_metrics:setup(),
+
+    %% OC Measures
+    Measures = lists:append([
+        oc_net_measures(),
+        oc_session_measures(),
+        oc_wamp_measures()
+    ]),
+    _ = [
+        oc_stat_measure:new(Name, Description, Unit)
+        || {Name, Description, Unit} <- Measures
+    ],
+
+    %% OC Views
+    Views = lists:append([
+        oc_net_views(),
+        oc_session_views(),
+        oc_wamp_views()
+    ]),
+    _ = [oc_stat_view:subscribe(V) || V <- Views],
+
+    %% OC Collectors
+    Collectors = [
+        prometheus_vm_memory_collector,
+        prometheus_vm_statistics_collector,
+        prometheus_vm_system_info_collector,
+        oc_stat_exporter_prometheus
+    ],
+    _ = [prometheus_registry:register_collector(C) || C <- Collectors],
+
+    ok.
+
 %% -----------------------------------------------------------------------------
 %% @doc
 %% @end
@@ -88,8 +131,38 @@ report() ->
     prometheus_text_format:format().
 
 
+%% -----------------------------------------------------------------------------
+%% @doc Latency distribution in seconds
+%% @end
+%% -----------------------------------------------------------------------------
+latency_distribution() ->
+    %% {oc_stat_aggregation_distribution, [
+    %%     {buckets, [
+    %%         0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75,
+    %%         1, 2, 5, 10, 30, 45, 60, 120, 300, 900
+    %%     ]}
+    %% ]}.
+    {oc_stat_aggregation_distribution, [
+        %% {buckets, [
+        %%     0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75,
+        %%     1, 2, 5, 10, 30, 45, 60, 120, 300, 900
+        %% ]}
+        {buckets, [
+            0, 2, 5, 25, 50, 75, 100, 200, 400, 600, 800, 1000, 2000, 4000, 6000
+        ]}
+    ]}.
 
 
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+byte_size_distribution() ->
+    {oc_stat_aggregation_distribution, [
+        {buckets, [
+            0, 5, 10, 15, 20, 40, 60, 80, 100, 200, 400, 600, 800, 1000
+        ]}
+    ]}.
 
 %% =============================================================================
 %% PROMETHEUS_COLLECTOR CALLBACKS
@@ -120,7 +193,6 @@ collect_mf(_Registry, Callback) ->
 
 
 init([]) ->
-    ok = setup(),
     State = #state{},
     {ok, State}.
 
@@ -274,43 +346,6 @@ handle_wamp_event(#yield{}, #{count := N}, Meta, State) ->
 %% =============================================================================
 
 
-
-setup() ->
-    ok = bondy_telemetry_http_metrics:setup(),
-    ok = setup_oc(),
-    %% ok = declare_metrics(),
-    %% ok = declare_net_metrics(),
-    %% ok = declare_session_metrics(),
-    %% ok = declare_wamp_metrics(),
-
-    Collectors = [
-        prometheus_vm_memory_collector,
-        prometheus_vm_statistics_collector,
-        prometheus_vm_system_info_collector,
-        oc_stat_exporter_prometheus
-    ],
-    _ = [prometheus_registry:register_collector(C) || C <- Collectors],
-    ok.
-
-
-setup_oc() ->
-    Measures = lists:append([
-        oc_net_measures(),
-        oc_session_measures(),
-        oc_wamp_measures()
-    ]),
-    _ = [
-        oc_stat_measure:new(Name, Description, Unit)
-        || {Name, Description, Unit} <- Measures
-    ],
-
-    Views = lists:append([
-        oc_net_views(),
-        oc_session_views(),
-        oc_wamp_views()
-    ]),
-    _ = [oc_stat_view:subscribe(V) || V <- Views],
-    ok.
 
 
 oc_net_measures() ->

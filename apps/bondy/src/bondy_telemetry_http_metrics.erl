@@ -9,45 +9,48 @@
 %%   <li>
 %%     `cowboy_early_errors_total'<br/>
 %%     Type: counter.<br/>
-%%     Labels: default - `[]', configured via `early_errors_labels'.<br/>
+%%     Tags: default - `[]', configured via `early_errors_tags'.<br/>
 %%     Total number of Cowboy early errors, i.e. errors that occur before a request is received.
 %%   </li>
 %%   <li>
-%%     `bondy_protocol_upgrades_total'<br/>
+%%     `cowboy_protocol_upgrades_total'<br/>
 %%     Type: counter.<br/>
-%%     Labels: default - `[]', configured via `protocol_upgrades_labels'.<br/>
-%%     Total number of protocol upgrades, i.e. when http connection upgraded to websocket connection.
+%%     Tags: default - `[]', configured via `protocol_upgrades_tags'.<br/>
+%%     Total number of protocol upgrades, i.e. when http connection
+%%     upgraded to websocket connection.
 %%   </li>
 %%   <li>
 %%     `cowboy_requests_total'<br/>
 %%     Type: counter.<br/>
-%%     Labels: default - `[method, reason, status_class]', configured via `request_labels'.<br/>
+%%     Tags: default - `[method, reason, status_class]', configured via `request_tags'.<br/>
 %%     Total number of Cowboy requests.
 %%   </li>
 %%   <li>
 %%     `cowboy_spawned_processes_total'<br/>
 %%     Type: counter.<br/>
-%%     Labels: default - `[method, reason, status_class]', configured via `request_labels'.<br/>
+%%     Tags: default - `[method, reason, status_class]', configured via `request_tags'.<br/>
 %%     Total number of spawned processes.
 %%   </li>
 %%   <li>
 %%     `cowboy_errors_total'<br/>
 %%     Type: counter.<br/>
-%%     Labels: default - `[method, reason, error]', configured via `error_labels'.<br/>
+%%     Tags: default - `[method, reason, error]', configured via `error_tags'.<br/>
 %%     Total number of Cowboy request errors.
 %%   </li>
 %%   <li>
 %%     `cowboy_request_duration_seconds'<br/>
 %%     Type: histogram.<br/>
-%%     Labels: default - `[method, reason, status_class]', configured via `request_labels'.<br/>
-%%     Buckets: default - `[0.01, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4]', configured via `duration_buckets'.<br/>
+%%     Tags: default - `[method, reason, status_class]', configured via `request_tags'.<br/>
+%%     Buckets: default - `[0.01, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4]',
+%%     configured via `duration_buckets'.<br/>
 %%     Cowboy request duration.
 %%   </li>
 %%   <li>
 %%     `cowboy_receive_body_duration_seconds'<br/>
 %%     Type: histogram.<br/>
-%%     Labels: default - `[method, reason, status_class]', configured via `request_labels'.<br/>
-%%     Buckets: default - `[0.01, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4]', configured via `duration_buckets'.<br/>
+%%     Tags: default - `[method, reason, status_class]', configured via `request_tags'.<br/>
+%%     Buckets: default - `[0.01, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4]',
+%%     configured via `duration_buckets'.<br/>
 %%     Request body receiving duration.
 %%   </li>
 %% </ul>
@@ -63,15 +66,15 @@
 %% {prometheus, [
 %%   ...
 %%   {cowboy_instrumenter, [{duration_buckets, [0.01, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4]},
-%%                          {early_error_labels,  []},
-%%                          {request_labels, [method, reason, status_class]},
-%%                          {error_labels, [method, reason, error]},
+%%                          {early_error_tags,  []},
+%%                          {request_tags, [method, reason, status_class]},
+%%                          {error_tags, [method, reason, error]},
 %%                          {registry, default}]}
 %%   ...
 %% ]}
 %% </pre>
 %%
-%% ==Labels==
+%% ==Tags==
 %%
 %% Builtin:
 %%  - host,
@@ -82,221 +85,280 @@
 %%  - reason,
 %%  - error.
 %%
-%% ===Custom labels===
-%% can be implemented via module exporting label_value/2 function.
-%% First argument will be label name, second is Metrics data from
+%% ===Custom tags===
+%% can be implemented via module exporting meta_value/2 function.
+%% First argument will be tag name, second is Metrics data from
 %% <a href="https://github.com/ninenines/cowboy/blob/master/src/cowboy_metrics_h.erl">
 %% metrics stream handler
 %% </a>.
-%% Set this module to `labels_module' configuration option.
+%% Set this module to `tags_module' configuration option.
 %%
 %% @end
-
-%% Replaces
-%% -module(prometheus_cowboy2_instrumenter).
-
 -module(bondy_telemetry_http_metrics).
-
 
 -export([setup/0]).
 -export([observe/1]).
 
--compile({inline, [inc/2,
-                   inc/3,
-                   observe/3]}).
 
--define(DEFAULT_DURATION_BUCKETS, [0.01, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4]).
-
--define(DEFAULT_EARLY_ERROR_LABELS, []).
--define(DEFAULT_PROTOCOL_UPGRADE_LABELS, []).
--define(DEFAULT_REQUEST_LABELS, [method, reason, status_class]).
--define(DEFAULT_ERROR_LABELS, [method, reason, error]).
--define(DEFAULT_LABELS_MODULE, undefined).
--define(DEFAULT_REGISTRY, default).
--define(DEFAULT_CONFIG, [{duration_buckets, ?DEFAULT_DURATION_BUCKETS},
-                         {early_error_labels,  ?DEFAULT_EARLY_ERROR_LABELS},
-                         {protocol_upgrade_labels, ?DEFAULT_PROTOCOL_UPGRADE_LABELS},
-                         {request_labels, ?DEFAULT_REQUEST_LABELS},
-                         {error_labels, ?DEFAULT_ERROR_LABELS},
-                         {lables_module, ?DEFAULT_LABELS_MODULE},
-                         {registry, ?DEFAULT_REGISTRY}]).
 
 %% ===================================================================
 %% API
 %% ===================================================================
 
--spec observe(map()) -> ok.
+
+
+%% -----------------------------------------------------------------------------
 %% @doc
 %% <a href="https://github.com/ninenines/cowboy/blob/master/src/cowboy_metrics_h.erl">
 %% Metrics stream handler
 %% </a> callback.
 %% @end
-observe(Metrics0=#{ref:=ListenerRef}) ->
-  {Host, Port} = ranch:get_addr(ListenerRef),
-  dispatch_metrics(Metrics0#{listener_host=>Host,
-                             listener_port=>Port}),
-  ok.
+%% -----------------------------------------------------------------------------
+-spec observe(map()) -> ok.
 
-%% @doc
-%% Sets all metrics up. Call this when the app starts.
+observe(#{ref := ListenerRef} = Metrics0) ->
+    {Host, Port} = ranch:get_addr(ListenerRef),
+    Metrics1 = Metrics0#{listener_host => Host, listener_port => Port},
+    report_metrics(Metrics1),
+    ok.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Sets all metrics up.
 %% @end
+%% -----------------------------------------------------------------------------
 setup() ->
-  prometheus_counter:declare([{name, bondy_http_early_errors_total},
-                              {registry, registry()},
-                              {labels, early_error_labels()},
-                              {help, "Total number of HTTP early errors."}]),
-  prometheus_counter:declare([{name, bondy_protocol_upgrades_total},
-                              {registry, registry()},
-                              {labels, protocol_upgrade_labels()},
-                              {help, "Total number of protocol upgrades."}]),
-  %% each observe call means new request
-  prometheus_counter:declare([{name, bondy_http_requests_total},
-                              {registry, registry()},
-                              {labels, request_labels()},
-                              {help, "Total number of HTTP requests."}]),
-  prometheus_counter:declare([{name, bondy_http_spawned_processes_total},
-                              {registry, registry()},
-                              {labels, request_labels()},
-                              {help, "Total number of spawned HTTP handlers  (processes)."}]),
-  prometheus_counter:declare([{name, bondy_http_errors_total},
-                              {registry, registry()},
-                              {labels, error_labels()},
-                              {help, "Total number of HTTP request errors."}]),
-  prometheus_histogram:declare([{name, bondy_http_request_duration_seconds},
-                                {registry, registry()},
-                                {labels, request_labels()},
-                                {buckets, duration_buckets()},
-                                {help, "HTTP request duration."}]),
-  prometheus_histogram:declare([{name, bondy_http_receive_body_duration_seconds},
-                                {registry, registry()},
-                                {labels, request_labels()},
-                                {buckets, duration_buckets()},
-                                {help, "Request body receiving duration."}]),
-
-  ok.
-
-%% ===================================================================
-%% Private functions
-%% ===================================================================
-
-dispatch_metrics(#{early_time_error := _}=Metrics) ->
-  inc(bondy_http_early_errors_total, early_error_labels(Metrics));
-dispatch_metrics(#{reason := switch_protocol}= Metrics) ->
-  inc(bondy_protocol_upgrades_total, protocol_upgrade_labels(Metrics));
-dispatch_metrics(#{req_start := ReqStart,
-                   req_end := ReqEnd,
-                   req_body_start := ReqBodyStart,
-                   req_body_end := ReqBodyEnd,
-                   reason := Reason,
-                   procs := Procs}=Metrics) ->
-  RequestLabels = request_labels(Metrics),
-  inc(bondy_http_requests_total, RequestLabels),
-  inc(bondy_http_spawned_processes_total, RequestLabels, maps:size(Procs)),
-  observe(bondy_http_request_duration_seconds, RequestLabels, ReqEnd - ReqStart),
-  case ReqBodyEnd of
-    undefined -> ok;
-    _ -> observe(bondy_receive_body_duration_seconds, RequestLabels,
-                 ReqBodyEnd - ReqBodyStart)
-  end,
+    _ = [
+        oc_stat_measure:new(Name, Description, Unit)
+        || {Name, Description, Unit} <- measures()
+    ],
+    _ = [oc_stat_view:subscribe(V) || V <- views()],
+    ok.
 
 
-  case Reason of
-    normal ->
-      ok;
-    switch_protocol ->
-      ok;
-    stop ->
-      ok;
-    _ ->
-      ErrorLabels = error_labels(Metrics),
-      inc(bondy_http_errors_total, ErrorLabels)
-  end.
 
-inc(Name, Labels) ->
-  prometheus_counter:inc(registry(), Name, Labels, 1).
+%% =============================================================================
+%% PRIVATE
+%% =============================================================================
 
-inc(Name, Labels, Value) ->
-  prometheus_counter:inc(registry(), Name, Labels, Value).
 
-observe(Name, Labels, Value) ->
-  prometheus_histogram:observe(registry(), Name, Labels, Value).
+%% @private
+measures() ->
+    [
+        {
+            <<"bondy/http/early_errors">>,
+            <<"Counts Cowboy early errors.">>,
+            none
+        },
+        {
+            <<"bondy/http/protocol_upgrades">>,
+            <<"Counts protocol upgrades.">>,
+            none
+        },
+        {
+            <<"bondy/http/request_duration">>,
+            <<"http request duration.">>,
+            millisecond
+        },
+        {
+            <<"bondy/http/spawned_processes">>,
+            <<"Counts spawned processes.">>,
+            none
+        },
+        {
+            <<"bondy/http/errors">>,
+            <<"Counts request errors.">>,
+            none
+        },
+        {
+            <<"bondy/http/receive_body_duration">>,
+            <<"Time needed to receive full body.">>,
+            millisecond
+        }
+    ].
 
-%% labels
 
-early_error_labels(Metrics) ->
-  compute_labels(early_error_labels(), Metrics).
+views() ->
+    [
+        #{
+            name => <<"bondy/http/early_errors_total">>,
+            measure => <<"bondy/http/early_errors">>,
+            description => <<"The total number of HTTP errors.">>,
+            tags => tags(),
+            aggregation => oc_stat_aggregation_count
+        },
+        #{
+            name => <<"bondy/http/protocol_upgrades_total">>,
+            measure => <<"bondy/http/protocol_upgrades">>,
+            description => <<"The total number of HTTP protocol upgrades.">>,
+            tags => tags(),
+            aggregation => oc_stat_aggregation_count
+        },
+        #{
+            name => <<"bondy/http/request_duration_seconds">>,
+            measure => <<"bondy/http/request_duration">>,
+            description => <<"HTTP request duration histogram.">>,
+            tags => tags(),
+            unit => second,
+            aggregation => bondy_telemetry:latency_distribution()
+        },
+        #{
+            name => <<"bondy/http/spawned_processes_total">>,
+            measure => <<"bondy/http/spawned_processes">>,
+            description => <<"The total number of spawned processes.">>,
+            tags => tags(),
+            aggregation => oc_stat_aggregation_count
+        },
+        #{
+            name => <<"bondy/http/errors_total">>,
+            measure => <<"bondy/http/errors">>,
+            description => <<"The total number of request errors.">>,
+            tags => tags(),
+            aggregation => oc_stat_aggregation_count
+        },
+        #{
+            name => <<"bondy/http/receive_body_duration">>,
+            measure => <<"bondy/http/receive_body_duration">>,
+            description => <<"Histogram of time needed to receive full body.">>,
+            tags => tags(),
+            unit => native_time_unit,
+            aggregation => bondy_telemetry:latency_distribution()
+        }
+    ].
 
-protocol_upgrade_labels(Metrics) ->
-  compute_labels(protocol_upgrade_labels(), Metrics).
 
-request_labels(Metrics) ->
-  compute_labels(request_labels(), Metrics).
+report_metrics(#{early_time_error := _} = Metrics) ->
+    oc_stat:record(meta(Metrics), <<"bondy/http/early_errors">>, 1);
 
-error_labels(Metrics) ->
-  compute_labels(error_labels(), Metrics).
+report_metrics(#{reason := switch_protocol} = Metrics) ->
+  oc_stat:record(meta(Metrics), <<"bondy/http/protocol_upgrades">>, 1);
 
-compute_labels(Labels, Metrics) ->
-  [label_value(Label, Metrics) || Label <- Labels].
+report_metrics(Metrics) ->
+    #{
+        req_start := ReqStart,
+        req_end := ReqEnd,
+        req_body_start := ReqBodyStart,
+        req_body_end := ReqBodyEnd,
+        reason := Reason,
+        procs := Procs
+    } = Metrics,
+    Meta = meta(Metrics),
 
-label_value(host, #{listener_host:=Host}) ->
-  Host;
-label_value(port, #{listener_port:=Port}) ->
-  Port;
-label_value(method, #{req:=Req}) ->
-  cowboy_req:method(Req);
-label_value(status, #{resp_status:=Status}) ->
-  Status;
-label_value(status_class, #{resp_status:=undefined}) ->
-  undefined;
-label_value(status_class, #{resp_status:=Status}) ->
-  prometheus_http:status_class(Status);
-label_value(status_class, _) ->
-  %% prometheus_http:status_class fails if status value is undefined
-  <<"unknown">>;
-label_value(reason, #{reason:=Reason}) ->
-  case Reason of
-    _ when is_atom(Reason) -> Reason;
-    {ReasonAtom, _} -> ReasonAtom;
-    {ReasonAtom, _, _} -> ReasonAtom
-  end;
-label_value(error, #{reason:=Reason}) ->
-  case Reason of
-    _ when is_atom(Reason) -> undefined;
-    {_, {Error, _}, _} -> Error;
-    {_, Error, _} when is_atom(Error) -> Error;
-    _ -> undefined
-  end;
-label_value(Label, Metrics) ->
-  case labels_module() of
-    undefined -> undefined;
-    Module -> Module:label_value(Label, Metrics)
-  end.
+    Duration = erlang:convert_time_unit(ReqEnd - ReqStart, native, millisecond),
+    oc_stat:record(Meta, <<"bondy/http/spawned_processes">>, maps:size(Procs)),
+    oc_stat:record(Meta, <<"bondy/http/request_duration">>, Duration),
 
-%% configuration
+    case ReqBodyEnd of
+        undefined ->
+            ok;
+        _ ->
+            Duration = ReqBodyEnd - ReqBodyStart,
+            oc_stat:record(
+                Meta, <<"bondy/http/receive_body_duration">>, Duration)
+    end,
 
-config() ->
-  application:get_env(prometheus, cowboy_instrumenter, ?DEFAULT_CONFIG).
+    case Reason of
+        normal ->
+            ok;
+        switch_protocol ->
+            ok;
+        stop ->
+            ok;
+        _ ->
+            oc_stat:record(meta(Metrics), <<"bondy/http/errors">>, 1)
+    end.
 
-get_config_value(Key, Default) ->
-  proplists:get_value(Key, config(), Default).
 
-duration_buckets() ->
-  get_config_value(duration_buckets, ?DEFAULT_DURATION_BUCKETS).
 
-early_error_labels() ->
-  get_config_value(early_error_labels, ?DEFAULT_EARLY_ERROR_LABELS).
+tags() ->
+    [
+        host, port, method, status, status_class, reason, error
+    ].
 
-protocol_upgrade_labels() ->
-  get_config_value(protocol_upgrade_labels, ?DEFAULT_PROTOCOL_UPGRADE_LABELS).
 
-request_labels() ->
-  get_config_value(request_labels, ?DEFAULT_REQUEST_LABELS).
+meta(Metrics) ->
+    Tags = #{
+        host => meta_host(Metrics),
+        port => meta_port(Metrics),
+        method => meta_method(Metrics),
+        status => meta_status(Metrics),
+        status_class => meta_status_class(Metrics),
+        reason => meta_reason(Metrics),
+        error => meta_error(Metrics)
+    },
+    maps:merge(ocp:current_tags(), Tags).
 
-error_labels() ->
-  get_config_value(error_labels, ?DEFAULT_ERROR_LABELS).
 
-labels_module() ->
-  get_config_value(labels_module, undefined).
+meta_host(#{listener_host := Host}) -> Host.
 
-registry() ->
-  get_config_value(registry, ?DEFAULT_REGISTRY).
+
+meta_port(#{listener_port := Port}) -> Port.
+
+
+meta_method(#{req := Req}) -> cowboy_req:method(Req).
+
+
+meta_status(#{resp_status := Status}) -> Status.
+
+
+meta_status_class(#{resp_status := undefined}) ->
+    undefined;
+
+meta_status_class(#{resp_status := Status}) ->
+    status_class(Status).
+
+
+meta_reason(#{reason:=Reason}) ->
+    case Reason of
+        _ when is_atom(Reason) -> Reason;
+        {ReasonAtom, _} -> ReasonAtom;
+        {ReasonAtom, _, _} -> ReasonAtom
+    end.
+
+meta_error(#{reason:=Reason}) ->
+    case Reason of
+        _ when is_atom(Reason) -> undefined;
+        {_, {Error, _}, _} -> Error;
+        {_, Error, _} when is_atom(Error) -> Error;
+        _ -> undefined
+    end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% Returns status class for the http status code `SCode'.
+%%
+%% Raises `{invalid_value_error, SCode, Message}' error if `SCode'
+%% isn't a positive integer.
+%% @end
+%% -----------------------------------------------------------------------------
+status_class(SCode)
+when is_integer(SCode) andalso SCode > 0 andalso SCode < 100 ->
+    "unknown";
+
+status_class(SCode)
+when is_integer(SCode) andalso SCode > 0 andalso SCode < 200 ->
+    "informational";
+
+status_class(SCode)
+when is_integer(SCode) andalso SCode > 0 andalso SCode < 300 ->
+    "success";
+
+status_class(SCode)
+when is_integer(SCode) andalso SCode > 0 andalso SCode < 400 ->
+    "redirection";
+
+status_class(SCode)
+when is_integer(SCode) andalso SCode > 0 andalso SCode < 500 ->
+    "client-error";
+
+status_class(SCode)
+when is_integer(SCode) andalso SCode > 0 andalso SCode < 600 ->
+    "server-error";
+
+status_class(SCode)
+when is_integer(SCode) andalso SCode > 0 andalso SCode >= 600 ->
+    "unknown";
+
+status_class(C) ->
+    erlang:error({invalid_value, C, "status code must be a positive integer"}).

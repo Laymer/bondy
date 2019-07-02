@@ -148,6 +148,7 @@ shutdown() ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec close_context(bondy_context:t()) -> bondy_context:t().
+
 close_context(Ctxt) ->
     bondy_dealer:close_context(bondy_broker:close_context(Ctxt)).
 
@@ -157,6 +158,7 @@ close_context(Ctxt) ->
 %% @end
 %% -----------------------------------------------------------------------------
 -spec roles() -> #{binary() => #{binary() => boolean()}}.
+
 roles() ->
     ?ROUTER_ROLES.
 
@@ -188,15 +190,36 @@ agent() ->
 
 
 forward(M, #{session := _} = Ctxt0) ->
-    Ctxt1 = bondy_context:set_request_timestamp(Ctxt0, erlang:monotonic_time()),
-    %% _ = lager:debug(
-    %%     "Forwarding message; peer_id=~p, message=~p",
-    %%     [bondy_context:peer_id(Ctxt), M]
-    %% ),
     %% Client has a session so this should be either a message
     %% for broker or dealer roles
-    ok = notify(M, Ctxt1),
-    do_forward(M, Ctxt1).
+
+    %% If the message has a span context we initialise the context with it
+    %% so that we use it as a parent span for ours.
+    SpanContext = bondy_wamp_utils:span_context(M),
+    Ctxt1 = bondy_context:with_span_context(Ctxt0, SpanContext),
+    Ctxt2 = bondy_context:with_child_span(
+        Ctxt1, <<"bondy/router/forward">>),
+    Ctxt3 = bondy_context:set_request_timestamp(Ctxt2, erlang:monotonic_time()),
+
+    ok = notify(M, Ctxt3),
+
+    try do_forward(M, Ctxt3) of
+        {ok, Ctxt4} = OK ->
+            true = bondy_context:finish_span(Ctxt4),
+            OK;
+        {reply, Reply, Ctxt4} ->
+            true = bondy_context:finish_span(Ctxt4),
+            {reply, Reply, Ctxt4}
+    catch
+        error:Reason:Stacktrace ->
+            _ = lager:error(
+                "Error while forwarding; reason=~p, stacktrace=~p",
+                [Reason, Stacktrace]
+            ),
+            true = bondy_context:finish_span(Ctxt3),
+            error(Reason)
+    end.
+
 
 
 %% -----------------------------------------------------------------------------
@@ -268,6 +291,7 @@ acknowledge_message(_) ->
 
 
 
+
 %% @private
 do_forward(#register{} = M, Ctxt) ->
     %% This is a sync call as it is an easy way to preserve RPC ordering as
@@ -325,10 +349,9 @@ do_forward(#call{} = M, Ctxt0) ->
     %% to Procedure 2, and both calls are routed to Callee A, then Callee A
     %% will first receive an invocation corresponding to Call 1 and then Call
     %% 2. This also holds if Procedure 1 and Procedure 2 are identical.
-    ok = sync_forward({M, Ctxt0}),
     %% The invocation is always async and the result or error will be delivered
     %% asynchronously by the dealer.
-    {ok, Ctxt0};
+    sync_forward({M, Ctxt0});
 
 do_forward(M, Ctxt) ->
     async_forward(M, Ctxt).
@@ -357,8 +380,7 @@ async_forward(M, Ctxt0) ->
             %% @TODO publish metaevent and stats
             %% @TODO use throttling and send error to caller conditionally
             %% We do it synchronously i.e. blocking the caller
-            ok = sync_forward(Event),
-            {ok, Ctxt0}
+            sync_forward(Event)
     catch
         ?EXCEPTION(error, Reason, _) when Acknowledge == true ->
             %% TODO Maybe publish metaevent
@@ -393,7 +415,7 @@ async_forward(M, Ctxt0) ->
 %% Synchronously forwards a message in the calling process.
 %% @end.
 %% -----------------------------------------------------------------------------
--spec sync_forward(event()) -> ok.
+-spec sync_forward(event()) -> {ok, bondy_context:t()}.
 
 sync_forward({#subscribe{} = M, Ctxt}) ->
     bondy_broker:handle_message(M, Ctxt);

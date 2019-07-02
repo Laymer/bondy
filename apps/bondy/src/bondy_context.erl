@@ -31,6 +31,7 @@
 -module(bondy_context).
 -include("bondy.hrl").
 -include_lib("wamp/include/wamp.hrl").
+-include_lib("opencensus/include/opencensus.hrl").
 
 -type subprotocol_2()        ::  subprotocol()
                                 | {http, text, json | msgpack}.
@@ -40,11 +41,6 @@
     %% Mandatory
     id := id(),
     node := atom(),
-    request_id := maybe_undefined(id()),
-    request_timeout := non_neg_integer(),
-    request_timestamp := maybe_undefined(integer()),
-    request_details := maybe_undefined(map()),
-    request_bytes := maybe_undefined(non_neg_integer()),
     call_timeout := non_neg_integer(),
     %% Optional
     realm_uri => uri(),
@@ -57,7 +53,15 @@
     encoding => encoding(),
     authmethod => binary(),
     authid => binary(),
-    roles => map()
+    roles => map(),
+    %% Request context
+    request_id := maybe_undefined(id()),
+    request_timestamp := maybe_undefined(integer()),
+    request_timeout := non_neg_integer(),
+    request_deadline := non_neg_integer(),
+    request_details := maybe_undefined(map()),
+    request_bytes := maybe_undefined(non_neg_integer()),
+    trace_context => ctx:t()
 }.
 -export_type([t/0]).
 
@@ -96,6 +100,16 @@
 -export([set_subprotocol/2]).
 -export([subprotocol/1]).
 -export([telemetry_metadata/1]).
+-export([trace_context/1]).
+-export([set_trace_context/2]).
+
+-export([span_context/1]).
+-export([current_span_context/1]).
+-export([with_child_span/2]).
+-export([with_parent_span/2]).
+-export([with_child_span/3]).
+-export([with_span_context/2]).
+-export([finish_span/1]).
 
 
 
@@ -121,7 +135,8 @@ new() ->
         request_timestamp => undefined,
         request_id => undefined,
         request_bytes => undefined,
-        request_timeout => 0
+        request_timeout => 0,
+        trace_context => ctx:new()
     }.
 
 
@@ -157,7 +172,8 @@ reset(Ctxt) ->
         request_details => undefined,
         request_timestamp => undefined,
         request_id => undefined,
-        request_timeout => 0
+        request_timeout => 0,
+        trace_context => ctx:new()
     }.
 
 
@@ -172,6 +188,116 @@ telemetry_metadata(Ctxt) ->
         transport, frame_type, encoding
     ],
     maps:with(Keys, Ctxt).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec trace_context(t()) -> ctx:t().
+
+trace_context(#{trace_context := Map}) -> Map.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec set_trace_context(t(), opencensus:span_ctx()) -> t().
+
+set_trace_context(Ctxt, TraceCtxt) ->
+    maps:put(trace_context, TraceCtxt, Ctxt).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Return the opencesus span context, if it exists, from Ctx.
+%% Otherwise create a new one
+%% @end
+%% -----------------------------------------------------------------------------
+-spec span_context(t()) -> opencensus:span_ctx().
+
+span_context(Ctxt) ->
+    oc_trace:from_ctx(trace_context(Ctxt)).
+
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Return the current span context in a `Ctxt' or `undefined'.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec current_span_context(t()) -> maybe(opencensus:span_ctx()).
+
+current_span_context(Ctxt) ->
+    oc_trace:current_span_ctx(trace_context(Ctxt)).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Set the current span context in a context to `SpanCtx'.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec with_span_context(t(), opencensus:span_ctx()) -> t().
+
+with_span_context(Ctxt, undefined) ->
+    Ctxt;
+
+with_span_context(Ctxt, SpanCtxt) ->
+    TraceCtxt0 = trace_context(Ctxt),
+    TraceCtxt1 = oc_trace:with_span_ctx(TraceCtxt0, SpanCtxt),
+    set_trace_context(Ctxt, TraceCtxt1).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc Create a child span with parent from the current context `Ctx'. And
+%% sets it as the current span context in `Ctx'.
+%% @end
+%% -----------------------------------------------------------------------------
+-spec with_child_span(t(), Name :: unicode:unicode_binary()) -> t().
+
+with_child_span(Ctxt, Name) when is_binary(Name) ->
+    TraceCtxt0 = trace_context(Ctxt),
+    TraceCtxt1 = oc_trace:with_child_span(TraceCtxt0, Name),
+    set_trace_context(Ctxt, TraceCtxt1).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec with_child_span(Ctx, Name, Options) -> Ctx when
+      Ctx :: t(),
+      Name :: unicode:unicode_binary(),
+      Options :: #{remote_parent => boolean(),
+                   sampler => module(),
+                   attributes => opencensus:attributes()}.
+
+with_child_span(Ctxt, Name, Options) ->
+    TraceCtxt0 = trace_context(Ctxt),
+    TraceCtxt1 = oc_trace:with_child_span(TraceCtxt0, Name, Options),
+    set_trace_context(Ctxt, TraceCtxt1).
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+with_parent_span(Ctxt0, SpanCtxt) ->
+    Ctxt1 = with_span_context(Ctxt0, SpanCtxt),
+    case current_span_context(Ctxt1) of
+        SpanCtxt ->
+            Ctxt1;
+        Child ->
+            with_child_span(Ctxt1, Child)
+    end.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec finish_span(t()) -> boolean().
+
+finish_span(Ctxt) ->
+    oc_trace:finish_span(current_span_context(Ctxt)).
 
 
 %% -----------------------------------------------------------------------------
@@ -525,3 +651,14 @@ request_details(#{request_details := Val}) ->
 
 is_feature_enabled(Ctxt, Role, Feature) ->
     maps_utils:get_path([Role, Feature], roles(Ctxt), false).
+
+
+
+
+
+%% =============================================================================
+%% TELEMETRY
+%% =============================================================================
+
+
+

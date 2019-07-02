@@ -44,7 +44,8 @@ handle_call(
         {error, WampError} ->
             WampError
     end,
-    bondy:send(bondy_context:peer_id(Ctxt), R);
+    ok = bondy:send(bondy_context:peer_id(Ctxt), R),
+    {ok, Ctxt};
 
 handle_call(
     #call{procedure_uri = ?BACKUP_STATUS} = M, Ctxt) ->
@@ -54,7 +55,8 @@ handle_call(
         {error, WampError} ->
             WampError
     end,
-    bondy:send(bondy_context:peer_id(Ctxt), R);
+    ok = bondy:send(bondy_context:peer_id(Ctxt), R),
+    {ok, Ctxt};
 
 handle_call(
     #call{procedure_uri = ?RESTORE_BACKUP} = M, Ctxt) ->
@@ -64,4 +66,5 @@ handle_call(
         {error, WampError} ->
             WampError
     end,
-    bondy:send(bondy_context:peer_id(Ctxt), R).
+    ok = bondy:send(bondy_context:peer_id(Ctxt), R),
+    {ok, Ctxt}.

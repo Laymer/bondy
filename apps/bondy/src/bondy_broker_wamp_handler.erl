@@ -34,39 +34,46 @@ handle_call(#call{procedure_uri = <<"wamp.subscription.list">>} = M, Ctxt) ->
         ?WILDCARD_MATCH => []
     },
     M = wamp_message:result(M#call.request_id, #{}, [], Res),
-    bondy:send(bondy_context:peer_id(Ctxt), M);
+    ok = bondy:send(bondy_context:peer_id(Ctxt), M),
+    {ok, Ctxt};
 
 handle_call(#call{procedure_uri = <<"wamp.subscription.lookup">>} = M, Ctxt) ->
     % #{<<"topic">> := TopicUri} = Args = M#call.arguments,
     % Opts = maps:get(<<"options">>, Args, #{}),
     Res = #{},
     M = wamp_message:result(M#call.request_id, #{}, [], Res),
-    bondy:send(bondy_context:peer_id(Ctxt), M);
+    ok = bondy:send(bondy_context:peer_id(Ctxt), M),
+    {ok, Ctxt};
 
 handle_call(#call{procedure_uri = <<"wamp.subscription.match">>} = M, Ctxt) ->
     Res = #{},
     M = wamp_message:result(M#call.request_id, #{}, [], Res),
-    bondy:send(bondy_context:peer_id(Ctxt), M);
+    ok = bondy:send(bondy_context:peer_id(Ctxt), M),
+    {ok, Ctxt};
 
 handle_call(#call{procedure_uri = <<"wamp.subscription.get">>} = M, Ctxt) ->
     Res = #{},
     M = wamp_message:result(M#call.request_id, #{}, [], Res),
-    bondy:send(bondy_context:peer_id(Ctxt), M);
+    ok = bondy:send(bondy_context:peer_id(Ctxt), M),
+    {ok, Ctxt};
 
 handle_call(
     #call{procedure_uri = <<"wamp.subscription.list_subscribers">>} = M,
     Ctxt) ->
     Res = #{},
     M = wamp_message:result(M#call.request_id, #{}, [], Res),
-    bondy:send(bondy_context:peer_id(Ctxt), M);
+    ok = bondy:send(bondy_context:peer_id(Ctxt), M),
+    {ok, Ctxt};
 
 handle_call(
     #call{procedure_uri = <<"wamp.subscription.count_subscribers">>} = M,
     Ctxt) ->
     Res = #{},
     M = wamp_message:result(M#call.request_id, #{}, [], Res),
-    bondy:send(bondy_context:peer_id(Ctxt), M);
+    ok = bondy:send(bondy_context:peer_id(Ctxt), M),
+    {ok, Ctxt};
 
 handle_call(#call{} = M, Ctxt) ->
     Error = bondy_wamp_utils:no_such_procedure_error(M),
-    bondy:send(bondy_context:peer_id(Ctxt), Error).
+    ok = bondy:send(bondy_context:peer_id(Ctxt), Error),
+    {ok, Ctxt}.

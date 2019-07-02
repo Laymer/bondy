@@ -32,12 +32,85 @@
 -export([validate_call_args/4]).
 -export([no_such_procedure_error/1]).
 -export([no_such_registration_error/1]).
-
+-export([span_context/1]).
 
 
 %% =============================================================================
 %% API
 %% =============================================================================
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec span_context(wamp_message()) -> ctxt:t() | undefined.
+
+span_context(#hello{details = Map}) ->
+    do_span_context(Map);
+
+span_context(#welcome{details = Map}) ->
+    do_span_context(Map);
+
+span_context(#abort{details = Map}) ->
+    do_span_context(Map);
+
+span_context(#challenge{}) ->
+    undefined;
+
+span_context(#authenticate{}) ->
+    undefined;
+
+span_context(#goodbye{details = Map}) ->
+    do_span_context(Map);
+
+span_context(#error{details = Map}) ->
+    do_span_context(Map);
+
+span_context(#publish{options = Map}) ->
+    do_span_context(Map);
+
+span_context(#published{}) ->
+    undefined;
+
+span_context(#subscribe{options = Map}) ->
+    do_span_context(Map);
+
+span_context(#subscribed{}) ->
+    undefined;
+
+span_context(#unsubscribe{}) ->
+    undefined;
+
+span_context(#unsubscribed{}) ->
+    undefined;
+
+span_context(#event{details = Map}) ->
+    do_span_context(Map);
+
+span_context(#call{options = Map}) ->
+    do_span_context(Map);
+
+span_context(#result{details = Map}) ->
+    do_span_context(Map);
+
+span_context(#register{options = Map}) ->
+    do_span_context(Map);
+
+span_context(#registered{}) ->
+    undefined;
+
+span_context(#unregister{}) ->
+    undefined;
+
+span_context(#unregistered{}) ->
+    undefined;
+
+span_context(#invocation{details = Map}) ->
+    do_span_context(Map);
+
+span_context(#yield{options = Map}) ->
+    do_span_context(Map).
 
 
 
@@ -266,3 +339,11 @@ maybe_error({error, Reason}, #call{} = M) ->
 
 maybe_error(Val, #call{} = M) ->
     wamp_message:result(M#call.request_id, #{}, [Val], #{}).
+
+
+%% @private
+do_span_context(#{<<"_opencensus_context">> := Headers}) ->
+    oc_propagation_http_tracecontext:from_headers(Headers);
+
+do_span_context(#{}) ->
+    undefined.

@@ -32,7 +32,8 @@
     call_id                                 ::  id() | undefined,
     caller                                  ::  peer_id(),
     callee                                  ::  peer_id(),
-    timestamp                               ::  non_neg_integer()
+    timestamp                               ::  non_neg_integer(),
+    span_context                            ::  opencensus:span_ctx()
 }).
 
 
@@ -64,6 +65,7 @@
 -export([peek_invocation/2]).
 -export([procedure_uri/1]).
 -export([queue_size/0]).
+-export([span_context/1]).
 -export([timestamp/1]).
 
 
@@ -81,7 +83,7 @@
 -spec new(
     InvocationId :: id(),
     Callee :: remote_peer_id(),
-    Ctxt :: bondy_context:t()) -> t().
+    Caller :: local_peer_id()) -> t().
 
 new(InvocationId, Callee, Caller) ->
     #bondy_rpc_promise{
@@ -110,7 +112,8 @@ new(InvocationId, CallId, ProcUri, Callee, Ctxt) ->
         call_id = CallId,
         caller = bondy_context:peer_id(Ctxt),
         callee = Callee,
-        timestamp = bondy_context:request_timestamp(Ctxt)
+        timestamp = bondy_context:request_timestamp(Ctxt),
+        span_context = bondy_context:span_context(Ctxt)
     }.
 
 
@@ -156,6 +159,15 @@ procedure_uri(#bondy_rpc_promise{procedure_uri = Val}) -> Val.
 %% @end
 %% -----------------------------------------------------------------------------
 timestamp(#bondy_rpc_promise{timestamp = Val}) -> Val.
+
+
+%% -----------------------------------------------------------------------------
+%% @doc
+%% @end
+%% -----------------------------------------------------------------------------
+-spec span_context(t()) -> opencensus:trace_context().
+
+span_context(#bondy_rpc_promise{span_context = Val}) -> Val.
 
 
 %% -----------------------------------------------------------------------------
